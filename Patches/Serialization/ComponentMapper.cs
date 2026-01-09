@@ -122,24 +122,6 @@ static class ComponentMapper
         }
         return null;
     }
-
-    public static Component GetChild(this Component component) // Presumably a parent
-    {
-        if (!component) return null;
-
-        if (parentToChildren.TryGetValue(component, out var child))
-        {
-            // Cleanup
-            if (!child)
-            {
-                RemoveComponentFromMap(component);
-                return null;
-            }
-            return child;
-        }
-        return null;
-    }
-
     public static Component GetFirstParentFromHierarchy(this Component component)
     {
         Component parent = component;
@@ -153,19 +135,4 @@ static class ComponentMapper
 
         return lastValidParent;
     }
-
-    public static Component GetLastChildFromHierarchy(this Component component)
-    {
-        Component child = component;
-        Component lastValidChild = child;
-
-        while (child)
-        {
-            lastValidChild = child;
-            child = child.GetChild();
-        }
-
-        return lastValidChild;
-    }
-
 }

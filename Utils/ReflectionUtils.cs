@@ -13,9 +13,10 @@ internal static class ReflectionUtils
     // Caching system
     internal static LRUCache<FieldInfo, Func<object, object>> FieldInfoGetterCache;
     internal static LRUCache<FieldInfo, Action<object, object>> FieldInfoSetterCache;
+    internal static LRUCache<string, Type> TypeNameCache;
+    internal static LRUCache<(Type, Type), Func<object>> GenericActivatorConstructorCache;
     internal static ConditionalWeakTable<Type, Func<object, object>> SelfActivatorConstructorCache;
     internal static ConditionalWeakTable<Type, List<FieldInfo>> TypeToFieldsInfoCache;
-    internal static LRUCache<string, Type> TypeNameCache;
 
     public static Func<object, object> CreateFieldGetter(this FieldInfo fieldInfo)
     {
@@ -97,6 +98,31 @@ internal static class ReflectionUtils
         return true;
     }
 
+    public static Func<object> GetGenericConstructor(this Type genericDefinition, Type elementType)
+    {
+        if (!genericDefinition.IsGenericTypeDefinition)
+            throw new ArgumentException("Type must be a generic definition (e.g., List<>)");
+
+        var typeTuple = (genericDefinition, elementType);
+
+        if (GenericActivatorConstructorCache != null && GenericActivatorConstructorCache.TryGetValue(typeTuple, out var func)) return func;
+
+        // Combine them: List<> + int = List<int>
+        Type concreteType = genericDefinition.MakeGenericType(elementType);
+
+        // Create the Expression: () => new List<T>()
+        NewExpression newExp = Expression.New(concreteType);
+
+        // Cast to object so the delegate is compatible with Func<object>
+        UnaryExpression castExp = Expression.Convert(newExp, typeof(object));
+
+        // Compile it into a reusable delegate
+        func = Expression.Lambda<Func<object>>(castExp).Compile();
+        GenericActivatorConstructorCache?.Add(typeTuple, func);
+
+        return func;
+    }
+
     public static Type GetFastType(string compName)
     {
         // Expensive lookup if no cache available
@@ -111,4 +137,9 @@ internal static class ReflectionUtils
         }
         return compType;
     }
+
+    public static bool IsFieldABackingField(this FieldInfo field) => field.IsDefined(typeof(CompilerGeneratedAttribute), false) || field.Name.Contains("k__BackingField");
+    public static bool IsFieldABackingField(this MemberInfo info) =>
+        info is FieldInfo field && field.IsFieldABackingField();
+
 }

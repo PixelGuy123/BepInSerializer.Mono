@@ -77,11 +77,11 @@ namespace UnitySerializationBridge
 
 			// Benchmark
 			Benchmark(1);
-			// Benchmark(2);
-			// Benchmark(5);
-			// Benchmark(25);
-			// Benchmark(50);
-			// Benchmark(100);
+			Benchmark(2);
+			Benchmark(5);
+			Benchmark(25);
+			Benchmark(50);
+			Benchmark(100);
 
 			static void Benchmark(int instantiations)
 			{

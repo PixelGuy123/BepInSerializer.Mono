@@ -31,136 +31,89 @@ static partial class GameObjectMapper
 
     // SUMMARY: Get the parent object and manually add the SerializationHandler to do the task of saving the necessary data to be serialized
     [HarmonyPrefix]
-    static void TriggerBridgeCallbacks(Object original)
+    static void TriggerBridgeCallbacks(Object original, out SerializationHandler __state)
     {
-        GameObject rootSource = original as GameObject;
-        if (!rootSource && original is Component parentComp)
-            rootSource = parentComp.gameObject;
+        GameObject go = original as GameObject;
+        if (!go && original is Component parentComp)
+            go = parentComp.gameObject;
 
-        if (!rootSource) return;
+        __state = null;
+        if (!go) return;
 
-        // Iterate through the ENTIRE hierarchy of the source object (Prefab or existing GameObject).
-        var allSourceTransforms = rootSource.GetComponentsInChildren<Transform>(true);
-
-        for (int j = 0; j < allSourceTransforms.Length; j++)
+        // Heavy check, but with a important cache to handle
+        if (ContainerMap.TryGetValue(go, out var worthAddingSerializationHandler))  // If parent object exists, then this is a clone of a prefab that has already been scanned 
+                                                                                    // and doesn't need to be scanned twice
         {
-            GameObject sourceGo = allSourceTransforms[j].gameObject;
-
-            // * Make the ComponentMap map the components
-            if (!sourceGo.TryGetComponent<ComponentMap>(out var map))
-                map = sourceGo.AddComponent<ComponentMap>();
-            map.GetComponentsRegistered();
-
-            // Check if this specific node is already in the map (Duplicate scan check)
-            if (ContainerMap.TryGetValue(sourceGo, out _))
-            {
-                continue;
-            }
-
-            // Evaluate if this node needs tracking
-            bool isWorthSerializing = false;
-
-            // Using GetComponents because we are iterating the hierarchy manually
-            for (int i = 0; i < map.ReferencedComponents.Count; i++)
-            {
-                if (EvaluateTypeRegistering(map.ReferencedComponents[i]))
-                {
-                    isWorthSerializing = true;
-                }
-            }
-
-            // Create the SerializationHandler
-            var newChildData = new ChildGameObject(null, isWorthSerializing);
-            ContainerMap.Add(sourceGo, newChildData);
-
-            if (isWorthSerializing)
-            {
-                if (BridgeManager.enableDebugLogs.Value)
-                    Debug.Log($"[{sourceGo.name}] flagged for serialization tracking.");
-
-                // Add the component to the SOURCE (so it can be copied or referenced)
-                if (!sourceGo.TryGetComponent<SerializationHandler>(out _))
-                    sourceGo.AddComponent<SerializationHandler>();
-            }
+            if (BridgeManager.enableDebugLogs.Value)
+                Debug.Log($"Parent detected! {go.name}.");
         }
-    }
-
-    [HarmonyPostfix]
-    static void GetChildGOAndCacheIt(Object original, object __result)
-    {
-        GameObject rootSource = original as GameObject;
-        if (!rootSource && original is Component parentComp)
-            rootSource = parentComp.gameObject;
-
-        GameObject rootClone = __result as GameObject;
-        if (!rootClone && __result is Component childComp)
-            rootClone = childComp.gameObject;
-
-        if (!rootSource || !rootClone) return;
-
-        // Get parallel arrays of transforms. 
-        var sourceTransforms = rootSource.GetComponentsInChildren<Transform>(true);
-        var cloneTransforms = rootClone.GetComponentsInChildren<Transform>(true);
-
-        // Safety check
-        if (sourceTransforms.Length != cloneTransforms.Length)
+        else // Otherwise, do the usual scan through every component
         {
-            Debug.LogWarning($"[SerializationDetector] Hierarchy mismatch after instantiate! Source: {sourceTransforms.Length}, Clone: {cloneTransforms.Length}. Mapping may fail.");
+            worthAddingSerializationHandler = new ChildGameObject(go, false);
+            if (BridgeManager.enableDebugLogs.Value)
+                Debug.Log($"Registering every component in {go.name}");
+            foreach (var comp in go.GetComponentsInChildren<Component>())
+            {
+                if (BridgeManager.enableDebugLogs.Value && !comp.GetType().IsFromGameAssemblies()) // Not spam the logs with garbage that won't be serialized anyways
+                    Debug.Log($"[{comp.name}] Detected on instantiation!");
+                // Evaluation happens here with every component of the object
+                worthAddingSerializationHandler.CanBeSerialized = EvaluateTypeRegistering(comp) || worthAddingSerializationHandler.CanBeSerialized;
+            }
+            ContainerMap.Add(go, worthAddingSerializationHandler);
+        }
+
+        if (!worthAddingSerializationHandler.CanBeSerialized)
+        {
+            if (BridgeManager.enableDebugLogs.Value)
+                Debug.Log($"SerializationHandler REFUSED to [{go.name}]");
             return;
         }
 
-        List<SerializationHandler> handlersToTriggerCallback = [];
+        if (BridgeManager.enableDebugLogs.Value)
+            Debug.Log($"SerializationHandler attached to [{go.name}]");
 
-        // Mapping Phase
-        for (int i = 0; i < sourceTransforms.Length; i++)
+        // Add the serialization handler if possible
+        if (!go.TryGetComponent(out __state)) // Use TryGetComponent because the reference isn't allocated if false
+            __state = go.AddComponent<SerializationHandler>();
+    }
+
+    // SUMMARY: After SerializationHandler serializes everything and gets passed to the child, it should deserialize everything on this child
+    // and call the necessary methods
+    [HarmonyPostfix]
+    static void GetChildGOAndCacheIt(Object original, object __result, SerializationHandler __state)
+    {
+        GameObject parentGo = original as GameObject;
+        if (!parentGo && original is Component parentComp)
+            parentGo = parentComp.gameObject;
+
+        GameObject childGo = __result as GameObject;
+        if (!childGo && __result is Component childComp)
+            childGo = childComp.gameObject;
+
+        if (!parentGo || !childGo) return; // The child gotta have came out of somewhere
+
+        // Basically register the child, so that the cycle continues and the cache works
+        if (!ContainerMap.TryGetValue(childGo, out _))
+            ContainerMap.Add(childGo, new ChildGameObject(null, true));
+        if (ContainerMap.TryGetValue(parentGo, out var parentData))
+            parentData.Go = childGo; // Set the child reference here
+
+        // Updates the mapping here before continuing
+        if (__state)
         {
-            GameObject sGo = sourceTransforms[i].gameObject;
-            GameObject cGo = cloneTransforms[i].gameObject;
+            if (!childGo.TryGetComponent<SerializationHandler>(out var handler)) return; // Disappointing, if this ever happens lol
 
-            // Register the Clone in the Map
-            if (!ContainerMap.ContainsKey(cGo))
+            // Use __state for the previous component; handler for the child component
+            for (int i = 0; i < handler.ReferencedComponents.Count; i++)
             {
-                ContainerMap.Add(cGo, new ChildGameObject(null, true));
+                if (BridgeManager.enableDebugLogs.Value) Debug.Log($"Mapping [{__state.ReferencedComponents[i].name}] -> [{handler.ReferencedComponents[i].name}]");
+                // Parent = __state | Child = handler
+                ComponentMapper.RegisterParentChild(__state.ReferencedComponents[i], handler.ReferencedComponents[i]);
             }
 
-            // Link Source (Parent) -> Clone (Child)
-            if (ContainerMap.TryGetValue(sGo, out var parentData))
-            {
-                parentData.Go = cGo; // Forward Link
-                RegisterParent(cGo, sGo); // Backward Link (Inverse Dictionary)
-            }
-
-            // Component Mapping & Handler Lifecycle
-            if (sGo.TryGetComponent<ComponentMap>(out var parentMap) &&
-                cGo.TryGetComponent<ComponentMap>(out var childMap))
-            {
-                // Map the components specifically for this node
-                for (int k = 0; k < parentMap.ReferencedComponents.Count; k++)
-                {
-                    // Safety check index bounds
-                    if (k >= childMap.ReferencedComponents.Count) break;
-
-                    var pComp = parentMap.ReferencedComponents[k];
-                    var cComp = childMap.ReferencedComponents[k];
-
-                    if (BridgeManager.enableDebugLogs.Value)
-                        Debug.Log($"Mapping Deep Node [{sGo.name}]: {pComp.GetType().Name} -> {cComp.GetType().Name}");
-
-                    ComponentMapper.RegisterParentChild(pComp, cComp);
-                }
-
-                // Clear buffer
-                parentMap.ReferencedComponents.Clear();
-                childMap.ReferencedComponents.Clear();
-
-                if (cGo.TryGetComponent<SerializationHandler>(out var childHandler))
-                    handlersToTriggerCallback.Add(childHandler);
-            }
+            // Execute lifecycle in the child
+            handler.ExecuteLifecycleCallbacks();
         }
-
-        // Afterwards, trigger all deserializations available
-        for (int i = 0; i < handlersToTriggerCallback.Count; i++)
-            handlersToTriggerCallback[i].ExecuteLifecycleCallbacks();
     }
     internal static bool EvaluateTypeRegistering(Component component)
     {
@@ -173,5 +126,4 @@ static partial class GameObjectMapper
         return SerializationRegistry.Register(type);
     }
 }
-
 

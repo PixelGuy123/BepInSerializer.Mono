@@ -13,7 +13,7 @@ internal class ComponentMap : MonoBehaviour
         for (int i = 0; i < components.Length; i++)
         {
             // Can't be itself, a handler or a transform
-            if (components[i] == this || components[i] is SerializationHandler || components[i] is Transform) continue;
+            if (components[i] == this || components[i] is SerializationHandler) continue;
 
             ReferencedComponents.Add(components[i]);
         }

@@ -11,25 +11,26 @@ static class GameObjectMapper_DestroyCheck // Important to clean up cache
     [HarmonyPatch(nameof(Object.Destroy), [typeof(Object)])]
     static void RemoveCache(Object __0) // To make sure the component is properly serialized when added
     {
-        // Handle GameObject destruction (and its hierarchy)
+        // If the type is a GameObject, then we don't check for component below
         if (__0 is GameObject go)
         {
-            // If the object has child transforms that are also mapped, they need to be handled accordingly
-            var allTransforms = go.GetComponentsInChildren<Transform>(true);
-
-            foreach (var t in allTransforms)
+            // Remove the entire tree from below (literally cutting down the branch)
+            while (GameObjectMapper.ContainerMap.TryGetValue(go, out var childPair))
             {
-                GameObject currentGo = t.gameObject;
+                // Removes the parent from container
+                GameObjectMapper.ContainerMap.Remove(go);
 
-                // Check if this specific object is part of our custom linked list
-                if (GameObjectMapper.IsTracked(currentGo))
-                {
-                    // Remove it, stitch the siblings, and clean up its components
-                    GameObjectMapper.RemoveNodeAndStitch(currentGo);
-                }
+                // Set the reference to the child and see if the root goes deeper on the next iteration
+                var child = childPair.Go;
+                if (child)
+                    go = child;
             }
 
-            // Prune dead keys from the mapper
+            // Remove all the components too (very expensive)
+            var components = go.GetComponentsInChildren<Component>();
+            for (int i = 0; i < components.Length; i++)
+                ComponentMapper.RemoveComponentFromMap(components[i]);
+
             ComponentMapper.Prune();
             return;
         }

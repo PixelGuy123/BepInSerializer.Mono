@@ -51,6 +51,9 @@ internal class SerializationHandler : MonoBehaviour, ISerializationCallbackRecei
     private List<string> _componentNames = [];
     [SerializeField]
     private List<bool> _isFieldByReference = [];
+    // TO BE USED WITH THE SerializationDetector
+    public List<Component> ReferencedComponents = [];
+    private HashSet<Component> _hashedReferencedComponents = []; // Collection to optimize the lookup of ReferencedComponents
 
     // BEFORE SERIALIZATION
     public void OnBeforeSerialize()
@@ -66,6 +69,8 @@ internal class SerializationHandler : MonoBehaviour, ISerializationCallbackRecei
         _fields.Clear();
         _componentNames.Clear();
         _isFieldByReference.Clear();
+        ReferencedComponents.Clear();
+        _hashedReferencedComponents.Clear();
 
         // Clear buffers
         _triggeredReceiversBuffer.Clear();
@@ -80,6 +85,7 @@ internal class SerializationHandler : MonoBehaviour, ISerializationCallbackRecei
             _fields.Capacity = count;
             _componentNames.Capacity = count;
             _isFieldByReference.Capacity = count;
+            ReferencedComponents.Capacity = count;
         }
 
         // Check all registered targets from this GameObject
@@ -128,6 +134,7 @@ internal class SerializationHandler : MonoBehaviour, ISerializationCallbackRecei
                 _isFieldByReference.Add(json.isReference);
                 _fields.Add(baseField.Name);
                 _componentNames.Add(compType.AssemblyQualifiedName);
+                ReferencedComponents.Add(rootComponent);
             }
         }
 

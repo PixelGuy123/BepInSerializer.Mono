@@ -12,6 +12,7 @@ internal static class CacheInitializer
     {
         // Assembly Utils
         AssemblyUtils.TypeIsManagedCache = new();
+        AssemblyUtils.TypeIsUnityManagedCache = new();
 
         // SerializationRegistry
         SerializationRegistry._cachedRootTypes = new();
@@ -30,6 +31,7 @@ internal static class CacheInitializer
     {
         // SerializationHandler
         SerializationHandler.FieldInfoCache = new();
+        ReflectionUtils.GenericActivatorConstructorCache = new(BridgeManager.sizeForTypesReflectionCache.Value);
         ReflectionUtils.TypeNameCache = new(BridgeManager.sizeForTypesReflectionCache.Value);
         SerializationHandler.debugEnabled = BridgeManager.enableDebugLogs.Value;
     }

@@ -41,14 +41,6 @@ public struct SimpleStruct
     public int y;
 }
 
-// Edge Case: Handling Nested Collections (Unity cannot serialize List<List<T>>)
-// The bridge needs to handle the Wrapper approach.
-[Serializable]
-public struct ListWrapper
-{
-    public List<string> innerList;
-}
-
 // Edge Case: Circular Dependencies (Pure C#)
 [Serializable]
 public class CircularNode
@@ -68,6 +60,12 @@ public class BridgePayload
     public float floatInfinity;         // Test: float.PositiveInfinity
     public float floatNaN;              // Test: float.NaN
     public int intMin;                  // Test: int.MinValue
+
+    [Header("Unserialize Support")]
+    [NonSerialized]
+    public string thisTextMustNotBeSerialized;
+    [NonSerialized]
+    public int thisNumberMustNotBeSerialized;
 
     [Header("Enums")]
     public ComplexityEnum standardEnum;
@@ -89,6 +87,7 @@ public class BridgePayload
     public MonoBehaviour selfComponent; // Ref to holding Script
     public SerializationBridgeTester typedReference; // Typed Ref
     public ExternalRefComponent externalRef; // Ref to another script on same or diff GO
+    public List<GameObject> gameObjectList;
 
     [Header("Collections")]
     public int[] intArray;
@@ -97,7 +96,8 @@ public class BridgePayload
     public List<string> explicitlyNullList; // Actually null
 
     [Header("Nested Collections Wrapper")]
-    public List<List<ListWrapper>> nestedListWrappers;
+    [SerializeReference] public List<List<UnityEngine.Object>> nestedListReferences;
+    public List<List<List<AbstractItem>>> abstractThreeDimensionalItem;
 
     [Header("Polymorphism ([SerializeReference])")]
     [SerializeReference] public AbstractItem singlePolyItem;
@@ -105,7 +105,7 @@ public class BridgePayload
 
     [Header("Object Identity (Shared Refs)")]
     [SerializeReference] public AbstractItem sharedRefA;
-    [SerializeReference] public AbstractItem sharedRefB; // Must point to same instance as A
+    [SerializeReference] public AbstractItem sharedRefB; // Must point to same instance as A]
 
     [Header("Pure C# Circular Reference")]
     [SerializeReference] public CircularNode circularRoot;
@@ -140,59 +140,60 @@ public class SerializationBridgeTester : MonoBehaviour
     [ContextMenu("Initialize Full Test Data")]
     public void InitializeFullTestData()
     {
-        // Enabled payloads:
-        /*
-        3.
-        */
         // 0. Ensure Payload Exists
         payload = new BridgePayload();
 
         // // 1. Primitives & Boundaries
-        // payload.textWithSpecialChars = "Hello\nWorld\tWith \"Quotes\" & Symbols";
-        // payload.emptyString = "";
-        // payload.nullString = null;
-        // payload.floatInfinity = float.PositiveInfinity;
-        // payload.floatNaN = float.NaN;
-        // payload.intMin = int.MinValue;
+        payload.textWithSpecialChars = "Hello\nWorld\tWith \"Quotes\" & Symbols";
+        payload.emptyString = "";
+        payload.nullString = null;
+        payload.floatInfinity = float.PositiveInfinity;
+        payload.floatNaN = float.NaN;
+        payload.intMin = int.MinValue;
+
+        // 1.1. Non Serialization
+        payload.thisTextMustNotBeSerialized = "Something very bad to be serialized";
+        payload.thisNumberMustNotBeSerialized = 9123091;
 
         // // 2. Enums
-        // payload.standardEnum = ComplexityEnum.Complex;
-        // payload.flagsEnum = StatusFlags.Active | StatusFlags.Invisible;
+        payload.standardEnum = ComplexityEnum.Complex;
+        payload.flagsEnum = StatusFlags.Active | StatusFlags.Invisible;
 
         // // 3. Unity Value Types
-        // payload.nonZeroVector = new Vector3(1.1f, 2.2f, 3.3f);
-        // payload.specificRotation = Quaternion.Euler(45, 90, 180);
-        // payload.specificLayer = new LayerMask { value = 1 << 0 | 1 << 5 };
-        // payload.byteColor = new Color32(255, 128, 0, 255);
+        payload.nonZeroVector = new Vector3(1.1f, 2.2f, 3.3f);
+        payload.specificRotation = Quaternion.Euler(45, 90, 180);
+        payload.specificLayer = new LayerMask { value = 1 << 0 | 1 << 5 };
+        payload.byteColor = new Color32(255, 128, 0, 255);
 
         // // 4. Unity Reference Types (Internal Data)
-        // payload.curve = new AnimationCurve(new Keyframe(0, 0), new Keyframe(1, 1));
-        // payload.gradient = new Gradient();
-        // payload.gradient.SetKeys(
-        //     new GradientColorKey[] { new GradientColorKey(Color.red, 0.0f), new GradientColorKey(Color.blue, 1.0f) },
-        //     new GradientAlphaKey[] { new GradientAlphaKey(1.0f, 0.0f), new GradientAlphaKey(0.0f, 1.0f) }
-        // );
+        payload.curve = new AnimationCurve(new Keyframe(0, 0), new Keyframe(1, 1));
+        payload.gradient = new Gradient();
+        payload.gradient.SetKeys(
+            new GradientColorKey[] { new GradientColorKey(Color.red, 0.0f), new GradientColorKey(Color.blue, 1.0f) },
+            new GradientAlphaKey[] { new GradientAlphaKey(1.0f, 0.0f), new GradientAlphaKey(0.0f, 1.0f) }
+        );
 
         // 5. Unity Object References
         // Setup Self References
-        // payload.selfGameObject = this.gameObject;
-        // payload.selfTransform = this.transform;
-        // payload.selfComponent = this;
-        // payload.typedReference = this;
+        payload.selfGameObject = this.gameObject;
+        payload.selfTransform = this.transform;
+        payload.selfComponent = this;
+        payload.typedReference = this;
+        payload.gameObjectList = [gameObject];
 
-        // // Setup External Reference (Ensure component exists)
-        // var ext = GetComponent<ExternalRefComponent>();
-        // if (ext == null)
-        // {
-        //     GameObject objectToAttach = gameObject;
-        //     if (useChildObjectInsteadOfSelf)
-        //     {
-        //         objectToAttach = new GameObject("ChildObject");
-        //         objectToAttach.transform.SetParent(transform, false);
-        //     }
-        //     ext = objectToAttach.AddComponent<ExternalRefComponent>();
-        // }
-        // payload.externalRef = ext;
+        // Setup External Reference (Ensure component exists)
+        var ext = GetComponent<ExternalRefComponent>();
+        if (ext == null)
+        {
+            GameObject objectToAttach = gameObject;
+            if (useChildObjectInsteadOfSelf)
+            {
+                objectToAttach = new GameObject("ChildObject");
+                objectToAttach.transform.SetParent(transform, false);
+            }
+            ext = objectToAttach.AddComponent<ExternalRefComponent>();
+        }
+        payload.externalRef = ext;
 
         // 6. Collections
         payload.intArray = new int[] { 1, 1, 2, 3, 5, 8 };
@@ -201,14 +202,26 @@ public class SerializationBridgeTester : MonoBehaviour
         payload.explicitlyNullList = null;      // Explicitly null
 
         // // 7. Nested Collections Wrapper
-        payload.nestedListWrappers = [
-            [new ListWrapper { innerList = new List<string> { "Row1Col1", "Row1Col2" } }],
-            [new ListWrapper { innerList = new List<string> { "Row2Col1" } }]
+        payload.abstractThreeDimensionalItem = [
+            [
+                [
+                    new WeaponItem { id = "DimensionalSword", damage = 18491 }
+                ]
+            ]
+        ];
+        payload.nestedListReferences = [
+            null,
+            [
+                transform,
+                this,
+                gameObject
+            ]
         ];
 
         // 8. Polymorphism
         payload.singlePolyItem = new WeaponItem { id = "Sword", damage = 50 };
 
+        var refWeaponItem = new WeaponItem { id = "Hammer", damage = 125 };
         payload.polyList = new List<AbstractItem>();
         payload.polyList.Add(new WeaponItem { id = "Axe", damage = 75 });
         payload.polyList.Add(new PotionItem { id = "Health", healAmount = 25.5f, potionColor = Color.red });
@@ -228,6 +241,7 @@ public class SerializationBridgeTester : MonoBehaviour
         child.next = root; // The cycle
         payload.circularRoot = root;
 
+        if (!UnitySerializationBridge.BridgeManager.enableDebugLogs.Value) return;
         Debug.Log($"[BridgeTester] Data Initialized. Shared Ref Identity: {ReferenceEquals(payload.sharedRefA, payload.sharedRefB)}");
     }
 
@@ -235,6 +249,7 @@ public class SerializationBridgeTester : MonoBehaviour
     [ContextMenu("Verify Integrity")]
     public void VerifyIntegrity()
     {
+        if (!UnitySerializationBridge.BridgeManager.enableDebugLogs.Value) return;
         if (payload == null)
         {
             Debug.LogError("Payload is null!");

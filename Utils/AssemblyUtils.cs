@@ -3,13 +3,15 @@ using System.IO;
 using UnitySerializationBridge.Core.Serialization;
 using System.Runtime.CompilerServices;
 using System;
-using System.Collections;
+using UnityEngine;
+using System.Collections.Generic;
 
 namespace UnitySerializationBridge.Utils;
 
 internal static class AssemblyUtils
 {
     internal static ConditionalWeakTable<Assembly, StrongBox<bool>> TypeIsManagedCache;
+    internal static ConditionalWeakTable<Assembly, StrongBox<bool>> TypeIsUnityManagedCache;
 
     public static bool IsFromGameAssemblies(this Type type)
     {
@@ -38,29 +40,24 @@ internal static class AssemblyUtils
         return isManaged;
     }
 
-    public static bool IsUnityExclusive(this Type type, Type exceptionType = null)
+    public static bool IsUnityAssembly(this Assembly assembly)
+    {
+        // if the assembly is already known, return the value
+        if (TypeIsUnityManagedCache.TryGetValue(assembly, out var box))
+            return box.Value;
+
+        // Cache the managed part if it is not detected
+        bool isManaged = assembly.Location.EndsWith($"Managed{Path.DirectorySeparatorChar}{assembly.GetName().Name}.dll") && Path.GetFileName(assembly.Location).StartsWith("Unity");
+        TypeIsUnityManagedCache.Add(assembly, new(isManaged));
+
+        return isManaged;
+    }
+
+    public static bool IsUnityExclusive(this Type type)
     {
         Type objType = typeof(UnityEngine.Object);
-        // Check the type itself
-        if (objType.IsAssignableFrom(type) && (exceptionType == null || !exceptionType.IsAssignableFrom(type))) return true;
-
-        // Check generic arguments for collections
-        if (type.IsGenericType)
-        {
-            Type[] generics = type.GetGenericArguments();
-            for (int i = 0; i < generics.Length; i++)
-            {
-                if (objType.IsAssignableFrom(generics[i]) && (exceptionType == null || !exceptionType.IsAssignableFrom(generics[i]))) return true;
-            }
-        }
-
-        // Check array element types
-        if (type.IsArray && objType.IsAssignableFrom(type.GetElementType()) && (exceptionType == null || !exceptionType.IsAssignableFrom(type.GetElementType())))
-        {
-            return true;
-        }
-
-        return false;
+        // Check the type
+        return objType.IsAssignableFrom(type.GetTypeFromArray());
     }
 
     public static bool IsGameAssemblyType(this Type type)
@@ -72,49 +69,40 @@ internal static class AssemblyUtils
         if (!type.IsClass && !type.IsValueType) return false;
 
         // Check the type itself IF it is the type the one from assemblies; otherwise, go to collection check
-        if (!typeof(IEnumerable).IsAssignableFrom(type) && type.IsFromGameAssemblies()) return true;
+        if (!type.IsStandardCollection() && type.IsFromGameAssemblies()) return true;
 
         // Check generic arguments for collections
-        if (type.IsGenericType)
-        {
-            Type[] generics = type.GetGenericArguments();
-            for (int i = 0; i < generics.Length; i++)
-            {
-                if (generics[i].IsFromGameAssemblies()) return true;
-            }
-        }
-
-        // Check array element types
-        if (type.IsArray && type.GetElementType().IsFromGameAssemblies())
-        {
-            return true;
-        }
-
-        return false;
+        return type.GetTypeFromArray().IsFromGameAssemblies();
     }
 
     public static bool IsUnityComponentType(this Type type)
     {
-        var compType = typeof(UnityEngine.Component);
+        var elementType = type.GetTypeFromArray(); // Update the type used
         // Check the type itself IF it is the type the one from assemblies; otherwise, go to collection check
-        if (!typeof(IEnumerable).IsAssignableFrom(type) && compType.IsAssignableFrom(type)) return true;
+        return !type.IsStandardCollection() && (typeof(GameObject) == elementType || typeof(Component).IsAssignableFrom(elementType));
+    }
 
-        // Check generic arguments for collections
-        if (type.IsGenericType)
+    // Expect the most basic collection types to be checked, not IEnumerable in general
+    public static bool IsStandardCollection(this Type t) => typeof(Array).IsAssignableFrom(t) || typeof(List<>).IsAssignableFrom(t);
+
+    public static Type GetTypeFromArray(this Type collectionType, int layersToCheck = -1) =>
+        collectionType.GetTypeFromArray(layersToCheck, 0);
+    private static Type GetTypeFromArray(this Type collectionType, int layersToCheck, int currentLayer)
+    {
+        if ((layersToCheck > 0 && currentLayer >= layersToCheck) || !collectionType.IsStandardCollection())
+            return collectionType;
+
+
+        Type elementType;
+        // Must be a list
+        if (collectionType.IsGenericType)
         {
-            Type[] generics = type.GetGenericArguments();
-            for (int i = 0; i < generics.Length; i++)
-            {
-                if (compType.IsAssignableFrom(generics[i])) return true;
-            }
+            elementType = collectionType.GetGenericArguments()[0];
+            return elementType.GetTypeFromArray(layersToCheck, currentLayer + 1); // Recursive call
         }
+        if (!collectionType.IsArray) return collectionType; // Default to its own type
 
-        // Check array element types
-        if (type.IsArray && compType.IsAssignableFrom(type.GetElementType()))
-        {
-            return true;
-        }
-
-        return false;
+        elementType = collectionType.GetElementType();
+        return elementType.GetTypeFromArray(layersToCheck, currentLayer + 1);
     }
 }
