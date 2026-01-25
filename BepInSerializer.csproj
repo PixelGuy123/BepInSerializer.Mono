@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>netstandard2.0</TargetFramework>
+    <TargetFramework>net46</TargetFramework>
     <AssemblyName>BepInSerializer</AssemblyName>
     <Description>A library to make an easy bridge between other plugins and Unity's serialization system.</Description>
     <Version>1.0.0</Version>

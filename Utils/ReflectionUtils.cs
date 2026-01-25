@@ -4,25 +4,131 @@ using System.Linq.Expressions;
 using HarmonyLib;
 using System.Collections.Generic;
 using BepInSerializer.Core.Models;
-using System.Runtime.CompilerServices;
 using System.Linq;
 
 namespace BepInSerializer.Utils;
 
 internal static class ReflectionUtils
 {
-    internal record struct BaseTypeElementTypeItem(Type Base, Type Element);
+    // Delegates for specific constructors
+    public delegate Array ArrayConstructorDelegate(params int[] lengths);
+    // Structs for caching keys
+    internal record struct BaseTypeElementTypeItem(Type Base, Type[] Elements);
+    internal record struct BaseTypeRankLengthItem(Type Base, int RankCount);
     // Caching system
     internal static LRUCache<FieldInfo, Func<object, object>> FieldInfoGetterCache;
+    internal static LRUCache<PropertyInfo, Func<object, object>> PropertyInfoGetterCache;
     internal static LRUCache<FieldInfo, Action<object, object>> FieldInfoSetterCache;
+    internal static LRUCache<PropertyInfo, Action<object, object>> PropertyInfoSetterCache;
     internal static LRUCache<string, Type> TypeNameCache;
     internal static LRUCache<string, Func<object, object>> ConstructorCache;
     internal static LRUCache<BaseTypeElementTypeItem, Func<object>> GenericActivatorConstructorCache;
     internal static LRUCache<Type, Func<object>> ParameterlessActivatorConstructorCache;
-    internal static LRUCache<Type, Func<int, Array>> ArrayActivatorConstructorCache;
+    internal static LRUCache<BaseTypeRankLengthItem, ArrayConstructorDelegate> ArrayActivatorConstructorCache;
     internal static LRUCache<Type, Func<object, object>> SelfActivatorConstructorCache;
     internal static LRUCache<Type, List<FieldInfo>> TypeToFieldsInfoCache;
+    internal static LRUCache<Type, List<PropertyInfo>> TypeToPropertiesInfoCache;
     internal static LRUCache<Type, Dictionary<string, FieldInfo>> FieldInfoCache;
+    public static List<FieldInfo> GetSerializableFieldInfos(this Type type)
+    {
+        if (TypeToFieldsInfoCache.NullableTryGetValue(type, out var fields))
+            return fields;
+
+        // Cache fields for this specific type call
+        fields = AccessTools.GetDeclaredFields(type);
+        bool isDebugEnabled = BridgeManager.enableDebugLogs.Value;
+        bool isDeclaringTypeAComponent = type.IsUnityComponentType(); // If the declaring type is a component, Unity serialization rules apply
+
+        // Filter out the fields that cannot be serialized
+        for (int i = fields.Count - 1; i >= 0; i--)
+        {
+            var field = fields[i];
+
+            // Static or non-writeable is irrelevant
+            if (field.IsStatic || field.IsLiteral || field.IsInitOnly)
+            {
+                fields.RemoveAt(i);
+                continue;
+            }
+
+            Type fieldType = field.FieldType;
+
+            // Apply Serialization implementation (private fields can't be serialized, like in Unity)
+            if (!field.DoesFieldPassUnityValidationRules())
+            {
+                // Skip if it's a primitive
+                if (isDebugEnabled)
+                {
+                    BridgeManager.logger.LogInfo($"{field.Name} SKIPPED.");
+                }
+                fields.RemoveAt(i);
+                continue;
+            }
+
+            if (isDeclaringTypeAComponent && fieldType.CanUnitySerialize())
+            {
+                // Skip if it can be serialized by default
+                if (isDebugEnabled)
+                {
+                    BridgeManager.logger.LogInfo($"{field.Name} SKIPPED.");
+                }
+                fields.RemoveAt(i);
+                continue;
+            }
+        }
+
+        // Try to get fields from base types
+        var baseType = type.BaseType;
+        if (baseType != null && baseType != typeof(object))
+        {
+            var baseFields = baseType.GetSerializableFieldInfos();
+            fields.AddRange(baseFields);
+        }
+
+        TypeToFieldsInfoCache.NullableAdd(type, fields);
+        return fields;
+    }
+
+    public static List<PropertyInfo> GetSerializablePropertyInfos(this Type type)
+    {
+        // If no cache, do expensive part
+        if (TypeToPropertiesInfoCache.NullableTryGetValue(type, out var properties))
+            return properties;
+
+        // Cache fields for this specific type call
+        properties = AccessTools.GetDeclaredProperties(type);
+
+        // Filter out the fields that cannot be serialized
+        for (int i = properties.Count - 1; i >= 0; i--)
+        {
+            var property = properties[i];
+
+            // Static is irrelevant
+            if (property.IsStatic())
+            {
+                properties.RemoveAt(i);
+                continue;
+            }
+
+            // The property must have getter and setter, and one getter that's without parameters (there's get_Item(int32))
+            if (!property.CanWrite || property.GetGetMethod(true) == null || property.GetGetMethod(true).GetParameters().Length != 0)
+            {
+                properties.RemoveAt(i);
+                continue;
+            }
+        }
+
+        // Get the base type for properties
+        var baseType = type.BaseType;
+        if (baseType != null && baseType != typeof(object))
+        {
+            var baseProperties = baseType.GetSerializablePropertyInfos();
+            properties.AddRange(baseProperties);
+        }
+
+        TypeToPropertiesInfoCache.NullableAdd(type, properties);
+        return properties;
+    }
 
     public static Func<object, object> CreateFieldGetter(this FieldInfo fieldInfo)
     {
@@ -43,6 +149,28 @@ internal static class ReflectionUtils
 
         var lambda = Expression.Lambda<Func<object, object>>(resultExp, instanceParam).Compile();
         FieldInfoGetterCache.NullableAdd(fieldInfo, lambda);
+        return lambda;
+    }
+
+    public static Func<object, object> CreatePropertyGetter(this PropertyInfo propertyInfo)
+    {
+        if (PropertyInfoGetterCache.NullableTryGetValue(propertyInfo, out var getter)) return getter;
+
+        var instanceParam = Expression.Parameter(typeof(object), "instance");
+
+        // Convert instance to the declaring type
+        var typedInstance = Expression.Convert(instanceParam, propertyInfo.DeclaringType);
+
+        // Access the property
+        var propertyExp = Expression.Property(typedInstance, propertyInfo);
+
+        // Convert result to object if needed
+        var resultExp = propertyInfo.PropertyType.IsValueType ?
+            Expression.Convert(propertyExp, typeof(object)) :
+            (Expression)propertyExp;
+
+        var lambda = Expression.Lambda<Func<object, object>>(resultExp, instanceParam).Compile();
+        PropertyInfoGetterCache.NullableAdd(propertyInfo, lambda);
         return lambda;
     }
 
@@ -68,47 +196,28 @@ internal static class ReflectionUtils
         return lambda;
     }
 
-    public static List<FieldInfo> GetSerializableFieldInfos(this Type type, bool acceptUnityTypes = false)
+    public static Action<object, object> CreatePropertySetter(this PropertyInfo propertyInfo)
     {
-        // If no cache, do expensive part
-        if (TypeToFieldsInfoCache == null)
-            return AccessTools.GetDeclaredFields(type);
+        if (PropertyInfoSetterCache.NullableTryGetValue(propertyInfo, out var setter)) return setter;
 
-        if (TypeToFieldsInfoCache.TryGetValue(type, out var fields)) return fields;
-        // Cache fields for this specific type call
-        fields = AccessTools.GetDeclaredFields(type);
-        bool isDebugEnabled = BridgeManager.enableDebugLogs.Value;
+        var instanceParam = Expression.Parameter(typeof(object), "instance");
+        var valueParam = Expression.Parameter(typeof(object), "value");
 
-        // Filter out the fields that cannot be serialized
-        for (int i = fields.Count - 1; i >= 0; i--)
-        {
-            var field = fields[i];
+        // Convert instance to the declaring type
+        var typedInstance = Expression.Convert(instanceParam, propertyInfo.DeclaringType);
+        var typedValue = Expression.Convert(valueParam, propertyInfo.PropertyType);
 
-            // Static is irrelevant
-            if (field.IsStatic)
-            {
-                fields.RemoveAt(i);
-                continue;
-            }
+        // (Assign) Set the property
+        var assignExp = Expression.Assign(
+            Expression.Property(typedInstance, propertyInfo),
+            typedValue
+        );
 
-            Type fieldType = field.FieldType;
-            bool isDeclaringTypeAComponent = acceptUnityTypes || type.IsUnityComponentType(); // If the declaring type is a component, Unity serialization rules apply
-
-            // Apply Serialization implementation (private fields can't be serialized, like in Unity)
-            if (!field.DoesFieldPassUnityValidationRules() || (isDeclaringTypeAComponent && fieldType.CanUnitySerialize()))
-            {
-                // Skip if it's a primitive or if it isn't root
-                if (isDebugEnabled)
-                {
-                    BridgeManager.logger.LogInfo($"{field.Name} SKIPPED.");
-                }
-                fields.RemoveAt(i);
-            }
-        }
-
-        TypeToFieldsInfoCache.Add(type, fields);
-        return fields;
+        var lambda = Expression.Lambda<Action<object, object>>(assignExp, instanceParam, valueParam).Compile();
+        PropertyInfoSetterCache.NullableAdd(propertyInfo, lambda);
+        return lambda;
     }
+
 
     // There are some Unity components that have their own constructor for duplication (new Material(Material))
     public static bool TryGetSelfActivator(this Type type, out Func<object, object> func)
@@ -134,140 +243,18 @@ internal static class ReflectionUtils
         return true;
     }
 
-    public static Func<object> GetGenericConstructor(this Type genericDefinition, Type elementType)
-    {
-        if (!genericDefinition.IsGenericTypeDefinition)
-            throw new ArgumentException("Type must be a generic definition (e.g., List<>)");
-
-        var typeElement = new BaseTypeElementTypeItem(genericDefinition, elementType);
-
-        if (GenericActivatorConstructorCache.NullableTryGetValue(typeElement, out var func)) return func;
-
-        // Combine them: List<> + int = List<int>
-        Type concreteType = genericDefinition.MakeGenericType(elementType);
-
-        // Create the Expression: () => new List<T>()
-        NewExpression newExp = Expression.New(concreteType);
-
-        // Cast to object so the delegate is compatible with Func<object>
-        UnaryExpression castExp = Expression.Convert(newExp, typeof(object));
-
-        // Compile it into a reusable delegate
-        func = Expression.Lambda<Func<object>>(castExp).Compile();
-        GenericActivatorConstructorCache.NullableAdd(typeElement, func);
-
-        return func;
-    }
-
-    public static Func<object, object> GetGenericWrapperConstructor(this Type genericWrapper, params Type[] genericParameters)
-    {
-        // Validate inputs
-        if (genericWrapper == null)
-            throw new ArgumentNullException(nameof(genericWrapper));
-
-        if (genericParameters == null || genericParameters.Length == 0)
-            throw new ArgumentException("Generic parameters cannot be null or empty", nameof(genericParameters));
-
-        // Create a cache key based on the wrapper type and generic parameters
-        string cacheKey = CreateCacheKey(genericWrapper, genericParameters);
-
-        // Try to get cached constructor
-        if (ConstructorCache.NullableTryGetValue(cacheKey, out var cachedConstructor))
-            return cachedConstructor;
-
-        // Create closed generic type
-        if (!genericWrapper.IsGenericTypeDefinition)
-            throw new ArgumentException("Type must be a generic type definition", nameof(genericWrapper));
-
-        Type closedGenericType;
-        try
-        {
-            closedGenericType = genericWrapper.MakeGenericType(genericParameters);
-        }
-        catch (ArgumentException ex)
-        {
-            throw new ArgumentException(
-                $"Failed to create closed generic type from {genericWrapper.Name} with parameters {string.Join(", ", genericParameters.Select(t => t.Name))}",
-                nameof(genericParameters), ex);
-        }
-
-        // Find the single-parameter constructor
-        ConstructorInfo constructor;
-        try
-        {
-            // Assuming the constructor takes one parameter which is the wrapped collection
-            constructor = closedGenericType.GetConstructors()
-                .FirstOrDefault(c => c.GetParameters().Length == 1) ?? throw new InvalidOperationException(
-                    $"No single-parameter constructor found for type {closedGenericType.Name}");
-        }
-        catch (Exception ex)
-        {
-            throw new InvalidOperationException(
-                $"Failed to find constructor for {closedGenericType.Name}", ex);
-        }
-
-        // Create lambda expression: (object arg) => new T((TParam)arg)
-        var parameter = Expression.Parameter(typeof(object), "arg");
-
-        // Convert input object to constructor parameter type
-        var parameterType = constructor.GetParameters()[0].ParameterType;
-        var convertedArg = Expression.Convert(parameter, parameterType);
-
-        // Create new expression
-        var newExpression = Expression.New(constructor, convertedArg);
-
-        // Convert result to object if it's a value type (boxing)
-        Expression resultExpression = closedGenericType.IsValueType
-            ? Expression.Convert(newExpression, typeof(object)) // Box the struct
-            : newExpression;
-
-        // Compile the lambda
-        var lambda = Expression.Lambda<Func<object, object>>(
-            resultExpression,
-            parameter);
-
-        var compiledLambda = lambda.Compile();
-
-        ConstructorCache.NullableAdd(cacheKey, compiledLambda);
-
-        // Cache and return
-        return compiledLambda;
-
-        static string CreateCacheKey(Type genericWrapper, Type[] genericParameters)
-        {
-            // Create a unique key including assembly qualified name for the wrapper
-            // and full names for all generic parameters
-            var wrapperKey = genericWrapper.AssemblyQualifiedName;
-            var paramsKey = string.Join("|",
-                genericParameters.Select(p => p.AssemblyQualifiedName));
-
-            return $"{wrapperKey}[{paramsKey}]";
-        }
-    }
-
-    public static Func<int, Array> GetArrayConstructor(this Type elementType)
-    {
-        if (ArrayActivatorConstructorCache.NullableTryGetValue(elementType, out var func)) return func;
-        // Create parameter expression for the array length
-        ParameterExpression lengthParam = Expression.Parameter(typeof(int), "length");
-
-        // Create new array expression: new T[length]
-        NewArrayExpression newArrayExp = Expression.NewArrayBounds(elementType, lengthParam);
-
-        // Cast the T[] as System.Array
-        UnaryExpression castExp = Expression.TypeAs(newArrayExp, typeof(Array));
-
-        // Compile the lambda: (int length) => (Array)new T[length]
-        func = Expression.Lambda<Func<int, Array>>(castExp, lengthParam).Compile();
-        ArrayActivatorConstructorCache.NullableAdd(elementType, func);
-
-        return func;
-    }
-
     public static Func<object> GetParameterlessConstructor(this Type type)
     {
+        // Check if the type has a generic constructor to use the other function instead
+        if (type.IsGenericType || type.IsGenericTypeDefinition)
+        {
+            // BridgeManager.logger.LogInfo($"This is a parameterless generic type: {type}. Using generic parameterless constructor.");
+            return type.GetGenericParameterlessConstructor();
+        }
+
+        // Check for cache
         if (ParameterlessActivatorConstructorCache.NullableTryGetValue(type, out var func)) return func;
-        var parameterlessConstructor = type.GetConstructor(Type.EmptyTypes) ?? null;
+        var parameterlessConstructor = type.GetConstructor(Type.EmptyTypes);
         if (parameterlessConstructor == null)
         {
             ParameterlessActivatorConstructorCache.NullableAdd(type, null);
@@ -285,6 +272,83 @@ internal static class ReflectionUtils
         ParameterlessActivatorConstructorCache.NullableAdd(type, func);
         return func;
     }
+    public static Func<object> GetGenericParameterlessConstructor(this Type genericDefinition, params Type[] elementTypes)
+    {
+        // If it is not already a type definition, make it one
+        if (!genericDefinition.IsGenericTypeDefinition)
+            return genericDefinition.GetGenericTypeDefinition().GetGenericParameterlessConstructor(genericDefinition.GetGenericArguments());
+
+        var typeElement = new BaseTypeElementTypeItem(genericDefinition, elementTypes);
+
+        if (GenericActivatorConstructorCache.NullableTryGetValue(typeElement, out var func))
+            return func;
+
+        // Create the constructed generic type: List<T> becomes List<int>
+        if (elementTypes.Length != genericDefinition.GetGenericArguments().Length)
+            throw new ArgumentException($"Number of type arguments ({elementTypes.Length}) doesn't match the generic type definition's arity ({genericDefinition.GetGenericArguments().Length})");
+
+        Type constructedType = genericDefinition.MakeGenericType(elementTypes);
+
+        // Get the appropriate constructor
+        var constructor = constructedType.GetConstructor(Type.EmptyTypes);
+
+        Expression newExp;
+
+        if (constructor != null)
+        {
+            // Class with explicit parameterless constructor or struct with explicit parameterless constructor (C# 10+)
+            newExp = Expression.New(constructor);
+        }
+        else if (constructedType.IsValueType)
+        {
+            // using Expression.Default, which creates the default value for value types
+            newExp = Expression.Default(constructedType);
+        }
+        else
+        {
+            // If it doesn't contain a parameterless constructor and it's a class, just return a null func
+            func = null;
+            GenericActivatorConstructorCache.NullableAdd(typeElement, func);
+            return func;
+        }
+
+        // Cast to object so the delegate is compatible with Func<object>
+        UnaryExpression castExp = Expression.Convert(newExp, typeof(object));
+
+        // Compile it into a reusable delegate
+        func = Expression.Lambda<Func<object>>(castExp).Compile();
+        GenericActivatorConstructorCache.NullableAdd(typeElement, func);
+
+        return func;
+    }
+
+    public static ArrayConstructorDelegate GetArrayConstructor(this Type elementType, int rankCount)
+    {
+        if (rankCount < 1) throw new ArgumentException("Rank count must be at least 1.");
+        var rankLengthItem = new BaseTypeRankLengthItem(elementType, rankCount);
+        if (ArrayActivatorConstructorCache.NullableTryGetValue(rankLengthItem, out var func))
+            return func;
+
+        // Create parameter expression for the array lengths
+        ParameterExpression lengthsParam = Expression.Parameter(typeof(int[]), "lengths");
+
+        // Create new array expression: new T[lengths[0], lengths[1], ..., lengths[rankCount-1]]
+        NewArrayExpression newArrayExp = Expression.NewArrayBounds(elementType,
+            Enumerable.Range(0, rankCount).Select(i =>
+                Expression.ArrayIndex(lengthsParam, Expression.Constant(i))
+            )
+        );
+
+        // Cast the T[,] as System.Array
+        UnaryExpression castExp = Expression.TypeAs(newArrayExp, typeof(Array));
+
+        // Compile the lambda: (int[] lengths) => (Array)new T[lengths[0], lengths[1], ..., lengths[rankCount-1]]
+        func = Expression.Lambda<ArrayConstructorDelegate>(castExp, lengthsParam).Compile();
+        ArrayActivatorConstructorCache.NullableAdd(rankLengthItem, func);
+
+        return func;
+    }
+
 
     public static Type GetFastType(string compName)
     {
@@ -312,5 +376,16 @@ internal static class ReflectionUtils
             fields[fieldName] = field;
         }
         return field;
+    }
+
+    public static bool IsTypeHierarchyGeneric(this Type type)
+    {
+        Type t = type;
+        while (t != null && t != typeof(object) && t != typeof(UnityEngine.Object))
+        {
+            if (t.IsGenericType) return true;
+            t = t.BaseType;
+        }
+        return false;
     }
 }

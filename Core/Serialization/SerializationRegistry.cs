@@ -1,6 +1,5 @@
 using System.Collections.Generic;
 using System;
-using HarmonyLib;
 using UnityEngine;
 using BepInSerializer.Utils;
 using BepInSerializer.Core.Models;
@@ -12,29 +11,27 @@ internal static class SerializationRegistry
 {
     // Weak table uses WeakReferences; if one key from Type is nulled out, this cache will release it too
     // The StrongBox is just to hold the boolean (struct) into a reference type wrapper (object)
-    internal static LRUCache<Type, bool> _cachedRootTypes;
+    private readonly static HashSet<Type> _cachedRootTypes = [];
     internal readonly static Dictionary<Type, List<FieldInfo>> ComponentFieldMap = [];
+    internal static LRUCache<Type, List<FieldInfo>> LongHierarchyComponentFieldMap; // Uses LRUCache to be a temporary cache for long-hierarchy components
 
     // ------ Public API ------
-    public static bool Register(Component component)
+    public static void Register(Component component)
     {
         var componentType = component.GetType();
-        bool cacheIsAvailable = _cachedRootTypes != null; // Doesn't use Nullable extension methods because there are many cases this boolean is used for
-        if (cacheIsAvailable && _cachedRootTypes.TryGetValue(componentType, out var worth))
+        if (_cachedRootTypes.Contains(componentType))
         {
             if (BridgeManager.enableDebugLogs.Value)
-                BridgeManager.logger.LogInfo($"===== Cached Root ({componentType}) is Worth? ({worth}) =====");
-            return worth;
+                BridgeManager.logger.LogInfo($"===== Cached Root ({componentType}) =====");
+            return;
         }
         if (componentType.IsFromGameAssemblies())
         {
             if (BridgeManager.enableDebugLogs.Value)
                 BridgeManager.logger.LogInfo($"===== Refused Game Assembly Root ({componentType}) =====");
-            _cachedRootTypes.Add(componentType, false);
-            return false;
+            _cachedRootTypes.Add(componentType);
+            return;
         }
-
-        bool isWorth = false;
 
         if (BridgeManager.enableDebugLogs.Value)
             BridgeManager.logger.LogInfo($"===== Registering Root ({componentType}) =====");
@@ -51,40 +48,56 @@ internal static class SerializationRegistry
             if (BridgeManager.enableDebugLogs.Value && currentScanType != componentType)
                 BridgeManager.logger.LogInfo($"===== Checking Sub-Root ({currentScanType.FullName}) =====");
             // currentScanType changes to inspect fields of the base classes.
-            isWorth |= ScanComponent(currentScanType);
+            ScanComponent(currentScanType);
 
             // Add to the cache if possible to this branch
-            if (cacheIsAvailable && !_cachedRootTypes.ContainsKey(currentScanType))
-                _cachedRootTypes.Add(currentScanType, isWorth);
+            _cachedRootTypes.Add(currentScanType);
 
             if (BridgeManager.enableDebugLogs.Value)
             {
-                BridgeManager.logger.LogInfo($"===== ATTEMPT TO REGISTER {currentScanType} | Worth: {isWorth} =====");
+                BridgeManager.logger.LogInfo($"===== ATTEMPT TO REGISTER {currentScanType} =====");
             }
             currentScanType = currentScanType.BaseType;
         }
 
         // Then, update the base type to know if it was really worth or not
-        if (cacheIsAvailable && currentScanType != componentType)
+        if (currentScanType != componentType)
         {
             if (BridgeManager.enableDebugLogs.Value)
             {
                 BridgeManager.logger.LogInfo($"-> Updated ComponentType Cache!");
             }
-            _cachedRootTypes[componentType] = isWorth;
+            _cachedRootTypes.Add(componentType);
+        }
+    }
+
+    public static List<FieldInfo> GetMappedFields(Type componentType)
+    {
+        if (LongHierarchyComponentFieldMap.NullableTryGetValue(componentType, out var cachedLongFieldInfos))
+            return cachedLongFieldInfos;
+
+        List<FieldInfo> fieldInfos = new(8);
+        // Try to get mapped fields from the first ever type found in the hierarchy
+        Type currentScanType = componentType;
+        while (currentScanType != null &&
+               !currentScanType.IsFromGameAssemblies())
+        {
+            if (ComponentFieldMap.TryGetValue(currentScanType, out var cachedFieldInfos))
+                fieldInfos.AddRange(cachedFieldInfos);
+            currentScanType = currentScanType.BaseType;
         }
 
-        return isWorth;
+        LongHierarchyComponentFieldMap.NullableAdd(componentType, fieldInfos);
+        return fieldInfos.Count != 0 ? fieldInfos : null;
     }
 
 
     // ---- Private Logic ----
-    private static bool ScanComponent(Type rootComponentType)
+    private static void ScanComponent(Type rootComponentType)
     {
         // Cache fields for this specific type call
         var fields = rootComponentType.GetSerializableFieldInfos();
         bool isDebugEnabled = BridgeManager.enableDebugLogs.Value;
-        bool modifiedField = fields.Count != 0;
 
         for (int i = 0; i < fields.Count; i++)
         {
@@ -100,7 +113,5 @@ internal static class SerializationRegistry
                 BridgeManager.logger.LogInfo($"Registered: {field.DeclaringType.Name}.{field.Name} -> {field.FieldType}");
             }
         }
-
-        return modifiedField;
     }
 }

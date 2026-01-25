@@ -20,7 +20,6 @@ internal static class AssemblyUtils
 
     public static bool IsFromGameAssemblies(this Type type)
     {
-        // Obviously the handler shouldn't be accounted at all
         var assembly = type.Assembly;
 
         if (typeof(BepInEx.BaseUnityPlugin).IsAssignableFrom(type)) // Never a plugin
@@ -46,29 +45,39 @@ internal static class AssemblyUtils
 
     public static bool IsUnityAssembly(this Assembly assembly)
     {
-        // if the assembly is already known, return the value
+        if (assembly == null) return false;
         if (TypeIsUnityManagedCache.NullableTryGetValue(assembly, out var box))
             return box;
 
-        // If the dll is not from BepInEx/Plugins, this gotta be a managed assembly file
-        bool isInManagedFolder = !assembly.TryGetAssemblyDirectoryName(out string dirName) || !dirName.Contains($"BepInEx{Path.DirectorySeparatorChar}plugins");
-        if (!isInManagedFolder)
+        string fullName = assembly.FullName;
+
+        // Use some known .NET types to prevent System types first
+        if (fullName.StartsWith("mscorlib") ||
+            fullName.StartsWith("System") ||
+            fullName.StartsWith("Microsoft") ||
+            fullName.StartsWith("netstandard"))
         {
             TypeIsUnityManagedCache.NullableAdd(assembly, false);
             return false;
         }
 
-        // If this is a non assembly-csharp, it must be an Unity dll
-        bool isNotAssemblyCsharp = !Path.GetFileName(assembly.Location).StartsWith("Assembly-CSharp");
-        if (isNotAssemblyCsharp)
+        // Check if it's a UnityEngine core assembly
+        bool isUnity = fullName.StartsWith("UnityEngine") || fullName.StartsWith("UnityEditor");
+
+        // If it's not a Unity DLL and not Assembly-CSharp, it's likely a 3rd party lib or plugin
+        if (!isUnity)
         {
-            TypeIsUnityManagedCache.NullableAdd(assembly, true);
-            return true;
+            // BepInEx check to exclude mod types
+            if (assembly.TryGetAssemblyDirectoryName(out string dirName) &&
+                dirName.Contains($"BepInEx{Path.DirectorySeparatorChar}plugins"))
+            {
+                TypeIsUnityManagedCache.NullableAdd(assembly, false);
+                return false;
+            }
         }
 
-        // Otherwise, this is inside Csharp, so return false
-        TypeIsUnityManagedCache.NullableAdd(assembly, false);
-        return false;
+        TypeIsUnityManagedCache.NullableAdd(assembly, isUnity);
+        return isUnity;
     }
 
     public static bool CanUnitySerialize(this Type type)
@@ -76,25 +85,17 @@ internal static class AssemblyUtils
         // First, what it CAN serialize by default
         if (type.IsPrimitive || type == typeof(string) || type.IsEnum) return true;
 
-        // If it's assignable here, then it can go
-        if (typeof(UnityEngine.Object).IsAssignableFrom(type)) return true;
+        // If it's assignable or from an Unity Assembly here, then it can go
+        if (type.IsFromGameAssemblies() || typeof(UnityEngine.Object).IsAssignableFrom(type)) return true;
 
-        // Exactly what the plugin aims to fix: classes and value types that aren't from the assembly not being serialized
-        if (!type.IsStandardCollection())
-        {
-            if (typeof(IEnumerable).IsAssignableFrom(type)) return false; // Other IEnumerable collections are not supported directly by Unity
-            return (type.IsClass || type.IsValueType) && type.IsFromGameAssemblies();
-        }
-
-        // Assumes it's a standard collection that Unity could serialize
-        var elementTypes = type.GetTypesFromArray(1); // Check only a single depth
-        return elementTypes[0].CanUnitySerialize(); // Check the single element type
+        // Whether the type is a Unity Component type
+        return type.IsUnityComponentType();
     }
 
     public static bool IsUnityComponentType(this Type type)
     {
         var elementTypes = type.GetTypesFromArray();
-        return elementTypes.Contains(typeof(GameObject)) || elementTypes.Exists(typeof(Component).IsAssignableFrom);
+        return elementTypes.TrueForAll(t => t == typeof(GameObject) || typeof(Component).IsAssignableFrom(t));
     }
 
     // Expect the most basic collection types to be checked, not IEnumerable in general

@@ -17,9 +17,6 @@ internal class BridgeManager : BaseUnityPlugin
 {
 	const string GUID = "pixelguy.pixelmodding.bepinex.serializer";
 
-	// ===== CRITICAL CONFIGURATIONS =====
-	internal static ConfigEntry<bool> allowNullableTypesWithoutSerializeReference;
-
 	// ===== DEBUG & PERFORMANCE CONFIGURATIONS =====
 	internal static ConfigEntry<bool> enableDebugLogs, enabledEstimatedTypeSize;
 	internal static ConfigEntry<int> sizeForTypesReflectionCache, sizeForMemberAccessReflectionCache;
@@ -30,6 +27,14 @@ internal class BridgeManager : BaseUnityPlugin
 
 	void Awake()
 	{
+		// ----- VERIFICATION -----
+		if (CheckIfEnvironmentAlreadyHasSerializerAvailable()) // If this is True, cancel the whole plugin
+		{
+			Logger.LogWarning("Serialization Test has passed!");
+			Logger.LogError($"Shutting down {PluginInfo.PLUGIN_NAME} since the environment may not need it.");
+			return;
+		}
+
 		// ----- INITIALIZATION -----
 		InitializeInstance();
 		ApplyHarmonyPatches();
@@ -49,6 +54,27 @@ internal class BridgeManager : BaseUnityPlugin
 #endif
 	}
 
+	private bool CheckIfEnvironmentAlreadyHasSerializerAvailable()
+	{
+		const string expectedString = "TestValueThatShouldBeSerializedLikeSuch!#4";
+		const int expectedNumber = 81958;
+
+		// Make a new subject
+		var testSubject = new GameObject("TestSerialization").AddComponent<BridgeManagerTestBehaviour>();
+		testSubject.myTestClass = new() { str = expectedString, value = expectedNumber };
+
+		// Test if the new subject is still serialized
+		var newSubject = Instantiate(testSubject);
+		var clonedTestClass = newSubject.myTestClass;
+		bool isSubjectSerialized = clonedTestClass != null && clonedTestClass.str == expectedString && clonedTestClass.value == expectedNumber;
+
+		// Destroy the subjects to release some memory
+		Destroy(testSubject.gameObject);
+		Destroy(newSubject.gameObject);
+
+		return isSubjectSerialized;
+	}
+
 	private void InitializeInstance()
 	{
 		Instance = this;
@@ -63,10 +89,10 @@ internal class BridgeManager : BaseUnityPlugin
 
 	private void SetupDebugConfigurations()
 	{
-		enableDebugLogs = Config.Bind("Debugging", "Enable Debug Logs", false, "If True, the library will log all the registered types on initialization.");
-		enabledEstimatedTypeSize = Config.Bind("Performance", "Enable Type-Size Estimation", false, "If True, the library will scan all types from the Plugins folder to estimate the max size of the cache for saving Types. This might make the loading time take longer.");
-		sizeForTypesReflectionCache = Config.Bind("Performance", "Type Caching Limit", 600, "Determines the size of the cache for saving types. Any value below 100 will default to estimating cache size (Type-Size Estimation).");
-		sizeForMemberAccessReflectionCache = Config.Bind("Performance", "Member Access Caching Limit", 450, "Determines the size of the cache for saving most member-access operations (FieldInfo.GetValue, FieldInfo.SetValue, MethodInfo.Invoke, Activator.Invoke, etc.). The value cannot be below 100.");
+		enableDebugLogs = Config.Bind("Debugging", "Enable Debug Logs", false, "If True, the library will log all the registered types on initialization (ONLY USE UPON REQUESTED, this will REALLY flood up the logs with garbage).");
+		enabledEstimatedTypeSize = Config.Bind("Performance", "Enable Type-Size Estimation", false, "If True, the library will scan all types from the Plugins folder to estimate the max size of the cache for saving Types.\nThis might slow down loading time for a tiny bit.");
+		sizeForTypesReflectionCache = Config.Bind("Performance", "Type Caching Limit", 600, "Determines the size of the cache for saving types.\nAny value below 100 will default to estimating cache size (Type-Size Estimation).");
+		sizeForMemberAccessReflectionCache = Config.Bind("Performance", "Member Access Caching Limit", 450, "Determines the size of the cache for saving most member-access operations (FieldInfo.GetValue, FieldInfo.SetValue, MethodInfo.Invoke, Activator.Invoke, etc.).\nThe value cannot be below 100.");
 		sizeForMemberAccessReflectionCache.Value = Mathf.Max(100, sizeForMemberAccessReflectionCache.Value);
 	}
 
@@ -91,7 +117,7 @@ internal class BridgeManager : BaseUnityPlugin
 		SceneManager.sceneLoaded -= OnSceneLoadedForCacheEstimation;
 
 		long typeSize = CalculateTypeSize();
-		sizeForTypesReflectionCache.Value = (int)System.Math.Floor(MathUtils.CalculateCurve(typeSize, 238));
+		sizeForTypesReflectionCache.Value = (int)System.Math.Max(100, System.Math.Floor(MathUtils.CalculateCurve(typeSize, 238)));
 		Logger.LogInfo($"Based on {typeSize} types detected, the LRUCache collections' estimated size is {sizeForTypesReflectionCache.Value}.");
 
 		LRUCacheInitializer.InitializeCacheValues();

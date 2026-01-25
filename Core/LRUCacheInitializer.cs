@@ -10,11 +10,13 @@ internal static class LRUCacheInitializer
     {
         int sizeForTypesCache = BridgeManager.sizeForTypesReflectionCache.Value;
         int sizeForMemberAccessCache = BridgeManager.sizeForMemberAccessReflectionCache.Value;
-        int controlledSizeForTypes = sizeForTypesCache > 450 ? sizeForTypesCache / 10 : sizeForTypesCache / 2;
+        int controlledSizeForTypes = sizeForTypesCache > 450 ? sizeForTypesCache / 5 : sizeForTypesCache / 2;
 
         // Reflection Utils
         ReflectionUtils.FieldInfoGetterCache = new(sizeForMemberAccessCache);
+        ReflectionUtils.PropertyInfoGetterCache = new(sizeForMemberAccessCache);
         ReflectionUtils.FieldInfoSetterCache = new(sizeForMemberAccessCache);
+        ReflectionUtils.PropertyInfoSetterCache = new(sizeForMemberAccessCache);
         ReflectionUtils.TypeNameCache = new(sizeForTypesCache);
         ReflectionUtils.GenericActivatorConstructorCache = new(controlledSizeForTypes);
         ReflectionUtils.ConstructorCache = new(controlledSizeForTypes);
@@ -22,13 +24,14 @@ internal static class LRUCacheInitializer
         ReflectionUtils.ArrayActivatorConstructorCache = new(controlledSizeForTypes);
         ReflectionUtils.SelfActivatorConstructorCache = new(controlledSizeForTypes);
         ReflectionUtils.TypeToFieldsInfoCache = new(controlledSizeForTypes);
+        ReflectionUtils.TypeToPropertiesInfoCache = new(controlledSizeForTypes);
         ReflectionUtils.FieldInfoCache = new(controlledSizeForTypes);
 
-        // SerializationRegistry
-        SerializationRegistry._cachedRootTypes = new(sizeForTypesCache);
+        // DelegateProvider
+        DelegateProvider._methodCache = new(controlledSizeForTypes);
 
-        // LifecycleSuppressor
-        LifecycleSuppressor._methodCache = new(sizeForTypesCache * 2);
+        // SerializationRegistry
+        SerializationRegistry.LongHierarchyComponentFieldMap = new(controlledSizeForTypes);
 
         // Assembly Utils
         AssemblyUtils.CollectionNestedElementTypesCache = new(controlledSizeForTypes);

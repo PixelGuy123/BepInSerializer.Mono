@@ -1,5 +1,6 @@
 #if DEBUG
 using System.Collections;
+using BepInSerializer.Test;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
@@ -17,11 +18,41 @@ internal static class BridgeManagerDebugger
 
         // Run benchmarks (uncomment as needed)
         RunBenchmark(1);
-        // RunBenchmark(2);
-        // RunBenchmark(5);
-        // RunBenchmark(25);
-        // RunBenchmark(50);
-        // RunBenchmark(100);
+        RunBenchmark(2);
+        RunBenchmark(5);
+        RunBenchmark(25);
+        RunBenchmark(50);
+        RunBenchmark(100);
+
+        // Make a basic sprite array
+        var sampleTexture = Texture2D.blackTexture;
+        Sprite[] testSprites = new Sprite[10];
+        for (int i = 0; i < testSprites.Length; i++)
+        {
+            Rect spriteRect = new(0, 0, sampleTexture.width, sampleTexture.height);
+            Vector2 pivot = new(0.5f, 0.5f);
+            testSprites[i] = Sprite.Create(sampleTexture, spriteRect, pivot);
+        }
+
+        // Try to make a generic component for testing
+        // 1. Create the GameObject
+        GameObject animObj = new("TestAnimatedSprite");
+
+        // 2. Add required components
+        animObj.AddComponent<SpriteRenderer>();
+        SpriteAnimator animator = animObj.AddComponent<SpriteAnimator>();
+
+        // 3. Create the Animation data
+        // We'll use the constructor: (int fps, UnderlyingType[] frames)
+        // This will automatically create SpriteFrame objects internally
+        SpriteAnimation walkAnim = new(12, testSprites);
+
+        // 4. Assign the animation to the animator
+        animator.currentAnimation = walkAnim;
+
+        // 5. Clone the animator
+        Object.Instantiate(animator);
+        Object.Instantiate(animObj);
     }
 
     private static void RunBenchmark(int instantiations)

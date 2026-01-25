@@ -501,7 +501,7 @@ public class BridgePayload
 
     [Header("Object Identity (Shared Refs)")]
     [SerializeReference] public AbstractItem sharedRefA;
-    [SerializeReference] public AbstractItem sharedRefB; // Must point to same instance as A]
+    [SerializeReference] public AbstractItem sharedRefB; // Must point to same instance as A
 
     [Header("Pure C# Circular Reference")]
     public CircularNode circularRoot;

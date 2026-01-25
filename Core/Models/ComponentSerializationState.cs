@@ -8,9 +8,16 @@ namespace BepInSerializer.Core.Models;
 /// Transient state holding the serialized data for a specific component instance.
 /// Replaces the runtime overhead of the SerializationHandler component.
 /// </summary>
-internal class ComponentSerializationState(Component component, Type type)
+internal class ComponentSerializationState
 {
-    public Component Component { get; } = component;
-    public Type ComponentType { get; } = type;
+    // Real constructor to get the type of the component
+    internal ComponentSerializationState(Component component) : this(component, component.GetType()) { }
+    private ComponentSerializationState(Component component, Type type)
+    {
+        Component = component;
+        ComponentType = type;
+    }
+    public Component Component { get; }
+    public Type ComponentType { get; }
     public List<SerializedFieldData> Fields { get; } = new(8);
 }

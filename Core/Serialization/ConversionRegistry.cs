@@ -11,7 +11,14 @@ public static class ConversionRegistry
 {
     // Converters List
     private static readonly List<FieldConverter> _convertersToUse = [
-        new ClassConverter(), // The first means the default converter for classes
+        new ClassConverter(), // Default converter for classes
+        new StringConverter(), // Default converter for strings
+        new StructConverter(), // Default converter for structs
+        new PseudoStructConverter(), // Default converter for Unity "pseudo-struct" classes (AnimationCurve, Gradient...)
+        new UnityObjectConverter(), // Default converter for Unity objects (Component, MonoBehaviour, GameObject...)
+        new ArrayConverter(), // Default converter for arrays
+        new ListConverter(), // Default converter for List<>
+        new DictionaryConverter(), // Default converter for Dictionary<,>
     ];
 
     // ----- PUBLIC API -----
@@ -27,19 +34,22 @@ public static class ConversionRegistry
     internal static object ConvertIfNeeded(FieldContext context)
     {
         bool debug = BridgeManager.enableDebugLogs.Value;
-        // Reverse for statement for going from user-defined to default converters
+
+        // Normal conversion loop
         for (int i = _convertersToUse.Count - 1; i >= 0; i--)
         {
             var converter = _convertersToUse[i];
             if (converter.CanConvert(context))
             {
-                if (debug) BridgeManager.logger.LogInfo($"[CONVERSION] Converting object ({context.Field.Name}) with ({converter.GetType()})");
-                return converter.Convert(context);
+                if (debug) BridgeManager.logger.LogInfo((context.PreviousValueType == null ? "## " : string.Empty) +
+                $"Converter {converter.GetType().Name} will convert type {context.ValueType}.");
+                var result = converter.Convert(context);
+                if (debug) BridgeManager.logger.LogInfo((context.PreviousValueType == null ? "## " : string.Empty) +
+                $"Converter {converter.GetType().Name} finished conversion and returned {result}.");
+                return result;
             }
         }
 
-
-        if (debug) BridgeManager.logger.LogInfo($"[CONVERSION] No converter found for field {context.Field.Name} of type {context.Field.FieldType}. Owner: {context.Field.DeclaringType}");
-        return context.OriginalValue;
+        return null;
     }
 }
