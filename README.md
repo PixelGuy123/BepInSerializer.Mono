@@ -1,20 +1,140 @@
 # BepInSerializer.Mono
-### WIP WARNING
-The README is still a WORK-IN-PROGRESS, which means it is still lacking information or it may be outdated. Likewise, no release is available yet, but the project itself is essentially finished.
+
+[![GitHub Repository](https://img.shields.io/badge/GitHub-Repo-blue?logo=github)](https://github.com/PixelGuy123/BepInSerializer.Mono) [![Mono Support](https://img.shields.io/badge/Mono_Support-brown?logo=unity)](https://unity.com) [![BepInEx 5](https://img.shields.io/badge/BepInEx-5-gray?labelColor=663300)](https://github.com/BepInEx/BepInEx)
 
 During the development of a plugin to be used with a code-injector for Unity, there are many times the developer will need to create some sort of data structure to wrap up many basic types for its customized components.
 
 In [BepInEx](https://github.com/BepInEx), it's known that attempting to create a data structure (classes, structs) marked as _serializable_ that is _actually serialized_ is virtually impossible through Unity alone.
 
-**BepInSerializer**, _restricted to the Mono builds (LINK HERE)_, is an **universal plugin** — a mod **expected** to work with most Unity games —, which aims to fix the afromentioned issue by acting as a intermediate bridge in the serialization process that handles all the `UnityEngine.Object` instantiation calls, and properly serialize/deserialize their fields using a custom conversion system.
+The main reason is due to how Unity internally works; keeping things simple, when we have a custom component with a `[Serializable]` class reference, that was injected into the engine, the field pointing to the data won't actually make it after the cloning process and, instead, point to null, which loses the previous information in the process.
 
-This plugin does **not** add any other meaningful elements to the gameplay, meaning there isn't much else this does aside from serialization. Unless you manage to find bugs; _then,_ you might want to report that in issues (LINK HERE/REMINDER TO MAKE ISSUES INSTRUCTIONS).
+**BepInSerializer** is a **universal plugin** — a mod **expected** to work with most Unity games — made for **BepInEx 5**. This project aims to fix the aforementioned issue by acting as an intermediate bridge in the serialization process that handles all the `UnityEngine.Object` instantiation calls, and properly serialize/deserialize their fields using a custom conversion system.
 
-## Installation
+This plugin does **not** add any other meaningful elements to the gameplay; there isn't much else this does aside from serialization. If you ever find anything different inside the gameplay with only this plugin alone, then you're welcome to report such bug in the [Issues Tracker](https://github.com/PixelGuy123/BepInSerializer.Mono/issues).
+
+---
+
+## ❔ Why only Mono?
+
+If you've paid enough attention, this project only has the suffix **Mono**, which means it'll work exclusively for any Unity build made **without IL2CPP.**
+
+There are two main reasons for this to occur:
+
+1. The project was made for **BepInEx 5**, which does not work with IL2CPP. However, a version for BepInEx 6 is still planned to be developed. Although, the second reason is...
+2. Due to the fact **BepInSerializer** has been built up from the ground up to attend **Mono projects**, the architecture barely understands the complexity of **IL2CPP Interop.** And so, at this point, it would be better to not even touch this type of closed compilation _yet_.
+
+> **This project will still be maintained in the Mono environment.**
+> If you're an ambitious developer, and you're willing to [**contribute to this project**](#-contributing) with a **IL2CPP** solution, _or even a **BepInEx 6** build_, you're always welcome to do so! We'd appreciate it! 😁
+
+---
+
+## 🚀 Getting Started
+
+### For Users/Players
+
+If you're here because a **mod** has a dependency on this project, just follow the [Installation](#-installation) guide and you're good to go.
+
+### For Plugin Developers
+
+- [Basics](Documentation/Basics.md#basics)
+  - [Implementing `ISerializationCallbackReceiver`](Documentation/Basics.md#-integration-with-iserializationcallbackreceiver)
+- [Attributes](Documentation/Attributes.md)
+- [Converters](Documentation/Converters.md)
+- [Writing Converters](Documentation/Writing-Converters.md)
+
+---
+
+## 📦 Installation
 
 > BepInSerializer is a **plugin** made for **BepInEx 5**.
+> If you're looking for building the binary from the repository, follow the instructions in the [**Cloning & Building locally** section](#-cloning--building-locally).
+
 Here's the step-by-step to install this plugin into your game:
 
 1. Install [BepInEx](https://docs.bepinex.dev/articles/user_guide/installation/index.html) into the game you're wishing to play with mods.
 2. Once BepInEx is installed, download this plugin through the [Releases](https://github.com/PixelGuy123/BepInSerializer.Mono/releases/latest) page.
 3. With the binary downloaded, your last task is simply put that inside the `BepInEx/plugins` folder.
+
+Note that running the game alone with this plugin won't really change much inside the game itself.
+
+You can verify if the serializer **loaded in** through BepInEx Console or inside `BepInEx/LogOutputs.log`.
+
+On the other hand, in order to verify that the serializer is **working** as intended, use a separate mod that supports this serializer to assure everything's functioning as expected.
+
+---
+
+## 🎮 Supported Unity Versions
+
+> **You can contribute by testing the Unity builds not tested yet (⭕) in the table below!**
+> **If you find issues with these versions, the [Issues Tracker](https://github.com/PixelGuy123/BepInSerializer.Mono/issues) is always open for feedback!**
+
+Even though **BepInSerializer** is meant to be universal and Unity barely changes their serialization/instantiation rules, there's always a bit of _unpredictability_ when working with different Unity versions.
+
+Currently, since this project is held by a single developer, it is quite impossible to ensure _every_ Unity version is safe to use, only the newer ones ~~(from games I have installed)~~ have been tested — `2020.1.x`, `2021.1.x` and `6000.1.x`. Nevertheless, as time goes on, more Unity versions can be tested by the community or by the developer.
+
+Here is a table of all the Unity versions this tool has seen once in its lifetime:
+
+|Unity Sub-Version|**2020**         |**2021**         |**2022**         |**2023**         |**6000**         |
+|-----------------|-----------------|-----------------|-----------------|-----------------|-----------------|
+|**XXXX.0.X**     |-                |-                |-                |-                |**6000.0.x** – ⭕|
+|**XXXX.1.X**     |**2020.1.x** – ✅|**2021.1.x** – ⭕|**2022.1.x** – ✅|**2023.1.x** – ⭕|**6000.1.x** – ✅|
+|**XXXX.2.X**     |**2020.2.x** – ⭕|**2021.2.x** – ⭕|**2022.2.x** – ⭕|**2023.2.x** – ⭕|**6000.2.x** – ⭕|
+|**XXXX.3.X**     |**2020.3.x** – ⭕|**2021.3.x** – ⭕|**2022.3.x** – ⭕|-                |**6000.3.x** – ⭕|
+|**XXXX.4.X**     |-                |-                |-                |-                |**6000.4.x** – ⭕|
+|**XXXX.5.X**     |-                |-                |-                |-                |**6000.5.x** – ⭕|
+
+**Subtitles:**
+
+- ✅ – Fully tested/supported.
+- 🚧 – Tested and Planned to be supported.
+- ❌ – Tested and Not planned to be supported.
+- ⭕ – Not tested yet.
+
+---
+
+## 🤝 Contributing
+
+If you wish to contribute to this project, you are always welcomed to make a PR (Pull Request) or report a bug.
+
+### 🐞 Reporting bugs
+
+Please use the **Bug report** issue template when opening bug reports (click **New issue → Bug report**). The template collects the information we need (Unity/BepInEx/BepInSerializer versions, reproduction steps, and logs such as `BepInEx/LogOutput.log`).
+
+### ✨ Pull requests
+
+How to submit a PR:
+
+1. Fork the repository and create a branch (e.g. `feat/short-description` or `fix/short-description`).
+2. Implement your change and **test** before adding to PR.
+3. Keep a clear description of the problem and your solution.
+4. **Make sure** to **not remove the dependencies** of the original project. Unless you're adding _new_ dependencies or updating existing ones.
+5. Open a PR against `master` and reference the related issue.
+
+In the same way that issues has a template, PRs also contain a **checklist template** of their own. When writing a new Pull Request, make sure to satisfy the **conditions** of the checklist before sending your work.
+
+---
+
+## 🍴 Cloning & Building Locally
+
+### 📝 Requirements
+
+- [NET Framework 4.6](https://dotnet.microsoft.com/en-us/download/dotnet-framework/net46)
+
+### 🖥️ Cloning from Git
+
+This basic bash script should do the job:
+
+```bash
+git clone https://github.com/PixelGuy123/BepInSerializer.Mono.git
+cd BepInSerializer.Mono
+```
+
+> **The `.csproj` contains a **`PostBuild`** event to copy the files to a few specific game locations; it is recommended to edit this event or completely remove it.**
+
+After cloning the project, a simple `dotnet build` should be enough to test if it builds locally. Finally, just copy-paste the compiled file, located in the `bin` folder, into any game with **BepInEx 5**.
+
+---
+
+## 📜 License
+
+This project is licensed under the **MIT** license. For more information, see [License](LICENSE).

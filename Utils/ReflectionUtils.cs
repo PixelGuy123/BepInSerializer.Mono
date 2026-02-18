@@ -13,8 +13,10 @@ internal static class ReflectionUtils
 {
     // Delegates for specific constructors
     public delegate Array ArrayConstructorDelegate(params int[] lengths);
+    public delegate void MethodInvokerDelegate(object instance, params object[] args);
     // Structs for caching keys
     internal record struct BaseTypeElementTypeItem(Type Base, Type[] Elements);
+    internal record struct MethodSignatureItem(Type DeclaringType, string MethodName, Type[] Args);
     internal record struct BaseTypeRankLengthItem(Type Base, int RankCount);
     // Caching system
     internal static LRUCache<FieldInfo, Func<object, object>> FieldInfoGetterCache;
@@ -23,6 +25,7 @@ internal static class ReflectionUtils
     internal static LRUCache<PropertyInfo, Func<object, object, object>> PropertyInfoSetterCache;
     internal static LRUCache<string, Type> TypeNameCache;
     internal static LRUCache<string, Func<object, object>> ConstructorCache;
+    internal static LRUCache<MethodSignatureItem, MethodInvokerDelegate> MethodInvokerCache;
     internal static LRUCache<BaseTypeElementTypeItem, Func<object>> GenericActivatorConstructorCache;
     internal static LRUCache<Type, Func<object>> ParameterlessActivatorConstructorCache;
     internal static LRUCache<BaseTypeRankLengthItem, ArrayConstructorDelegate> ArrayActivatorConstructorCache;
@@ -234,6 +237,73 @@ internal static class ReflectionUtils
         return func;
     }
 
+    /// <summary>
+    /// Creates a delegate that can invoke a method on the specified type dynamically. 
+    /// <para>The returned <see cref="MethodInvokerDelegate"/> takes the target instance (or <c>null</c> for static methods) and an array of arguments.</para>
+    /// </summary>
+    /// <param name="type">The type that declares the method.</param>
+    /// <param name="methodName">The name of the method to invoke.</param>
+    /// <param name="parameterTypes">The types of the method's parameters (used for overload resolution).</param>
+    /// <returns>An <see cref="MethodInvokerDelegate"/> that invokes the method when called.</returns>
+    /// <exception cref="InvalidOperationException"></exception>
+    /// <exception cref="ArgumentException"></exception>
+    public static MethodInvokerDelegate CreateMethodInvoker(
+        this Type type,
+        string methodName,
+        params Type[] parameterTypes)
+    {
+        var signature = new MethodSignatureItem(type, methodName, parameterTypes);
+        if (MethodInvokerCache.NullableTryGetValue(signature, out var cachedInvoker))
+            return cachedInvoker;
+
+        // Find the method with the specified name and parameter types
+        var method = type.GetMethod(
+            methodName,
+            BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static,
+            binder: null,
+            types: parameterTypes,
+            modifiers: null) ?? throw new InvalidOperationException(
+                $"Method '{methodName}' with the specified parameter types not found on type '{type}'.");
+
+        // Parameters for the delegate: object instance, object[] args
+        var instanceParam = Expression.Parameter(typeof(object), "instance");
+        var argsParam = Expression.Parameter(typeof(object[]), "args");
+
+        // Expressions for each method argument (cast from object[] to the required type)
+        var parameters = method.GetParameters();
+        var argumentExpressions = new Expression[parameters.Length];
+
+        for (int i = 0; i < parameters.Length; i++)
+        {
+            var paramType = parameters[i].ParameterType;
+            var argValue = Expression.ArrayIndex(argsParam, Expression.Constant(i));
+            argumentExpressions[i] = Expression.Convert(argValue, paramType);
+        }
+
+        // Determine the instance on which to call the method
+        Expression instanceExpr = null;
+        if (!method.IsStatic)
+        {
+            // Instance method: cast the object instance to the declaring type
+            instanceExpr = Expression.Convert(instanceParam, type);
+        }
+
+        // Build the method call expression
+        var callExpr = Expression.Call(instanceExpr, method, argumentExpressions);
+
+        // Wrap in a lambda: (instance, args) => callExpr
+        var lambda = Expression.Lambda<MethodInvokerDelegate>(
+            callExpr,
+            instanceParam,
+            argsParam);
+
+        var compiledMethod = lambda.Compile();
+
+        // Cache the method invoker delegate
+        MethodInvokerCache.NullableAdd(signature, compiledMethod);
+
+        return compiledMethod;
+    }
 
     public static Type GetFastType(string compName)
     {

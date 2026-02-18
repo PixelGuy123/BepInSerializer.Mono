@@ -1,11 +1,10 @@
 using System.Collections;
-using System.Collections.Generic;
 using BepInSerializer.Core.Serialization.Converters.Models;
 
 namespace BepInSerializer.Core.Serialization.Converters;
 
 // StructConverter (internal)
-internal class StructConverter : FieldConverter
+internal sealed class StructConverter : FieldConverter
 {
     public override bool CanConvert(FieldContext context)
     {

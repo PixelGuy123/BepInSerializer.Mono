@@ -6,7 +6,7 @@ namespace BepInSerializer.Core.Serialization.Converters;
 
 // PseudoStructConverter (internal)
 // Convert Unity types (properties) that essentially act as structs, but are reference types with properties instead of fields
-internal class PseudoStructConverter : FieldConverter
+internal sealed class PseudoStructConverter : FieldConverter
 {
     public override bool CanConvert(FieldContext context)
     {

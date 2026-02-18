@@ -5,7 +5,7 @@ namespace BepInSerializer.Core.Serialization.Converters;
 
 // UnityObjectConverter (internal)
 // Convert Unity Objects according to reference rules
-internal class UnityObjectConverter : FieldConverter
+internal sealed class UnityObjectConverter : FieldConverter
 {
     public override bool CanConvert(FieldContext context)
     {

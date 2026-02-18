@@ -305,11 +305,11 @@ public class SerializationBridgeTester : MonoBehaviour, ISerializationCallbackRe
 
     private void InitializeMultiListArray()
     {
-        payload.multiListArray = new List<string>[3];
+        payload.multiListArray = new HashSet<string>[3];
 
-        payload.multiListArray[0] = new List<string> { "Apple", "Banana", "Cherry" };
-        payload.multiListArray[1] = new List<string> { "Dog", "Cat" };
-        payload.multiListArray[2] = new List<string> { "Red", "Green", "Blue", "Yellow" };
+        payload.multiListArray[0] = ["Apple", "Banana", "Cherry"];
+        payload.multiListArray[1] = ["Dog", "Cat"];
+        payload.multiListArray[2] = ["Red", "Green", "Blue", "Yellow"];
     }
 
     private void InitializeMultiListMultiArray()
@@ -449,7 +449,8 @@ public class BridgePayload
     [AllowCollectionNesting]
     public int[][] twoDimensionalArray;
     [AllowCollectionNesting]
-    public List<string>[] multiListArray;
+    public HashSet<string>[] multiListArray;
+    [AllowCollectionNesting]
     public List<int[][]> multiListMultiArray;
     [AllowCollectionNesting]
     public List<GameObject[]>[] listOfGameObjectArrayArray;
@@ -515,6 +516,7 @@ public class BridgePayload
     [Header("Collections")]
     public int[] intArray;
     public List<int> intList;
+    [AllowCollectionNesting]
     public List<string> emptyList;      // Initialized but count 0
     public List<string> explicitlyNullList; // Actually null
 

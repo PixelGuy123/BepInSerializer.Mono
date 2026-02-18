@@ -5,7 +5,7 @@ using BepInSerializer.Core.Serialization.Converters.Models;
 namespace BepInSerializer.Core.Serialization.Converters;
 
 // ArrayConverter (internal)
-internal class ArrayConverter : FieldConverter
+internal sealed class ArrayConverter : FieldConverter
 {
     public override bool CanConvert(FieldContext context)
     {
@@ -15,6 +15,10 @@ internal class ArrayConverter : FieldConverter
 
     public override object Convert(FieldContext context)
     {
+        // If the original value is null, return null (don't create an empty list)
+        if (context.OriginalValue == null)
+            return !context.ContainsSerializeReference && TryConstructNewObject(context, out object newObject) ? newObject : null;
+
         if (context.OriginalValue is not Array sourceArray) return null;
         int rank = sourceArray.Rank;
         var elementType = context.ValueType.GetElementType();
@@ -69,6 +73,6 @@ internal class ArrayConverter : FieldConverter
     }
 
     // Whether it can be converted or not based on elementType
-    protected virtual bool CanArrayBeRecursivelyPopulated(Type elementType) =>
+    private bool CanArrayBeRecursivelyPopulated(Type elementType) =>
         elementType == typeof(string) || !typeof(IEnumerable).IsAssignableFrom(elementType); // If the type is not an IEnumerable (except strings), continue
 }

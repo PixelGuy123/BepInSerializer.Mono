@@ -39,6 +39,24 @@ public abstract class FieldConverter
     protected object ReConvert(FieldContext context) => ConversionRegistry.ConvertIfNeeded(context);
 
     // ----- RETRIEVING METHODS -----
+
+    /// <summary>
+    /// Attempts to invoke a method on the given instance with the specified parameters.
+    /// </summary>
+    /// <param name="instance">The instance to invoke the method on.</param>
+    /// <param name="methodName">The name of the method to invoke.</param>
+    /// <param name="parameters">The parameters to pass to the method.</param>
+    /// <exception cref="InvalidOperationException"></exception>
+    /// <exception cref="ArgumentException"></exception>
+    /// <remarks>This method uses cached expression trees to find the method, which is faster than standard reflection. This is useful for situations which would usually need <c>dynamic</c> usage.</remarks>
+    protected void TryInvokeMethod(object instance, string methodName, params object[] parameters)
+    {
+        Type[] argTypes = new Type[parameters.Length];
+        for (int i = 0; i < parameters.Length; i++) argTypes[i] = parameters[i]?.GetType() ?? typeof(object); // Handle null parameters
+        var invoker = instance.GetType().CreateMethodInvoker(methodName, argTypes);
+        invoker?.Invoke(instance, parameters);
+    }
+
     /// <summary>
     /// Tries to get the mapped <see cref="UnityEngine.Object"/> from an internal hierarchy map.
     /// </summary>
@@ -57,12 +75,22 @@ public abstract class FieldConverter
     }
 
     /// <summary>
-    /// Attempt to construct the object using its default constructor (if there is one).
+    /// Attempts to construct the object using its default constructor (if there is one).
     /// </summary>
     /// <param name="context">The context to be aware of the type of the object.</param>
     /// <param name="newConvert">The object constructed from the original, if successful.</param>
     /// <returns><see langword="true"/> if the construction was a success; otherwise, <see langword="false"/>.</returns>
-    protected bool TryConstructNewObject(FieldContext context, out object newConvert)
+    protected bool TryConstructNewObject(FieldContext context, out object newConvert) =>
+        TryConstructNewObject(context, true, out newConvert);
+
+    /// <summary>
+    /// Attempt to construct the object using its default constructor (if there is one).
+    /// </summary>
+    /// <param name="context">The context to be aware of the type of the object.</param>
+    /// <param name="allowUninitialized">Whether to allow uninitialized objects if the parameterless constructor is not found.</param>
+    /// <param name="newConvert">The object constructed from the original, if successful.</param>
+    /// <returns><see langword="true"/> if the construction was a success; otherwise, <see langword="false"/>.</returns>
+    protected bool TryConstructNewObject(FieldContext context, bool allowUninitialized, out object newConvert)
     {
         var constructor = context.ValueType.GetParameterlessConstructor();
         // Try the normal constructor
@@ -72,7 +100,7 @@ public abstract class FieldConverter
             return true;
         }
         // If this is not value type, we can try an uninitialized object
-        if (!context.ValueType.IsValueType)
+        if (allowUninitialized && !context.ValueType.IsValueType)
         {
             try
             {

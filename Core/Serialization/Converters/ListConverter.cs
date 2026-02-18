@@ -6,7 +6,7 @@ using BepInSerializer.Core.Serialization.Converters.Models;
 namespace BepInSerializer.Core.Serialization.Converters;
 
 // ListConverter (internal)
-internal class ListConverter : FieldConverter
+internal sealed class ListConverter : FieldConverter
 {
     public override bool CanConvert(FieldContext context)
     {
@@ -21,7 +21,15 @@ internal class ListConverter : FieldConverter
 
     public override object Convert(FieldContext context)
     {
-        if (context.OriginalValue is not IList originalList) return null;
+        // Declare a new object to hold the new list
+        object newObject;
+
+        // If the original value is null, use the standard serialize reference check
+        if (context.OriginalValue == null)
+            return !context.ContainsSerializeReference && TryConstructNewObject(context, allowUninitialized: false, out newObject) ? newObject : null;
+
+        // Get the original list and the generic argument type (T in List<T>)
+        var originalList = (IList)context.OriginalValue;
 
         // Generic argument from List<T>
         var genericType = context.ValueType.GetGenericArguments()[0];
@@ -31,12 +39,9 @@ internal class ListConverter : FieldConverter
             return null;
 
         // Make a new list (object)
-        if (TryConstructNewObject(context, out var newObject))
+        if (TryConstructNewObject(context, out newObject))
         {
-            // Failsafe to be an actual list
-            if (newObject is not IList newList) return null;
-
-
+            var newList = (IList)newObject;
             // Copy the original items to this new list, by using ReConvert
             for (int i = 0; i < originalList.Count; i++)
             {
@@ -51,6 +56,6 @@ internal class ListConverter : FieldConverter
     }
 
     // Whether it can be converted or not based on elementType
-    protected virtual bool CanListBeRecursivelyPopulated(Type elementType) =>
+    private bool CanListBeRecursivelyPopulated(Type elementType) =>
         elementType == typeof(string) || !typeof(IEnumerable).IsAssignableFrom(elementType); // If the type is not an IEnumerable (except strings), continue
 }

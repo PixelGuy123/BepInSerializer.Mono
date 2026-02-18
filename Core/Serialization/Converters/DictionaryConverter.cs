@@ -9,7 +9,7 @@ namespace BepInSerializer.Core.Serialization.Converters;
 /// <summary>
 /// A <see cref="FieldConverter"/> aimed to properly serialize <see cref="Dictionary{TKey, TValue}"/>.
 /// </summary>
-public class DictionaryConverter : FieldConverter
+public sealed class DictionaryConverter : FieldConverter
 {
     /// <summary>
     /// Returns whether the <see cref="FieldContext"/> can be converted by this class or not.
@@ -33,7 +33,15 @@ public class DictionaryConverter : FieldConverter
     /// <returns>An instance of <see cref="Dictionary{TKey, TValue}"/> if successfully converted; otherwise, <see langword="null"/>.</returns>
     public override object Convert(FieldContext context)
     {
-        if (context.OriginalValue is not IDictionary originalDictionary) return null;
+        // Declare a new object to hold the new dictionary
+        object newObject;
+
+        // If the original value is null, use the standard serialize reference check
+        if (context.OriginalValue == null)
+            return !context.ContainsSerializeReference && TryConstructNewObject(context, allowUninitialized: false, out newObject) ? newObject : null;
+
+        // Get the original dictionary and the generic argument types (TKey and TValue in Dictionary<TKey, TValue>)
+        var originalDictionary = (IDictionary)context.OriginalValue;
 
         // Generic argument from Dictionary<TKey, TValue>
         var genericArgs = context.ValueType.GetGenericArguments();
@@ -45,11 +53,9 @@ public class DictionaryConverter : FieldConverter
             return null;
 
         // Make a new list (object)
-        if (TryConstructNewObject(context, out var newObject))
+        if (TryConstructNewObject(context, out newObject))
         {
-            // Failsafe to be an actual list
-            if (newObject is not IDictionary newDictionary) return null;
-
+            var newDictionary = (IDictionary)newObject;
 
             // Copy the original items to this new list, by using ReConvert
             foreach (DictionaryEntry kvp in originalDictionary)
@@ -81,7 +87,7 @@ public class DictionaryConverter : FieldConverter
     /// <param name="keyElementType">The <see cref="Type"/> of the keys.</param>
     /// <param name="valueElementType">The <see cref="Type"/> of the values.</param>
     /// <returns><see langword="true"/> if both types are accepted by the dictionary; otherwise, <see langword="false"/></returns>
-    protected virtual bool CanDictionaryBeRecursivelyPopulated(Type keyElementType, Type valueElementType) =>
+    private bool CanDictionaryBeRecursivelyPopulated(Type keyElementType, Type valueElementType) =>
         (keyElementType == typeof(string) || !typeof(IEnumerable).IsAssignableFrom(keyElementType)) &&
         (valueElementType == typeof(string) || !typeof(IEnumerable).IsAssignableFrom(valueElementType)); // If the type is not an IEnumerable (except strings), continue
 }

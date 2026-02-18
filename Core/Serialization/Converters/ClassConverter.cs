@@ -5,7 +5,7 @@ using BepInSerializer.Core.Serialization.Converters.Models;
 namespace BepInSerializer.Core.Serialization.Converters;
 
 // ClassConverter (internal)
-internal class ClassConverter : FieldConverter
+internal sealed class ClassConverter : FieldConverter
 {
     public override bool CanConvert(FieldContext context)
     {
