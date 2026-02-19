@@ -8,20 +8,18 @@ In [BepInEx](https://github.com/BepInEx), it's known that attempting to create a
 
 The main reason is due to how Unity internally works; keeping things simple, when we have a custom component with a `[Serializable]` class reference, that was injected into the engine, the field pointing to the data won't actually make it after the cloning process and, instead, point to null, which loses the previous information in the process.
 
-**BepInSerializer** is a **universal plugin** — a mod **expected** to work with most Unity games — made for **BepInEx 5**. This project aims to fix the aforementioned issue by acting as an intermediate bridge in the serialization process that handles all the `UnityEngine.Object` instantiation calls, and properly serialize/deserialize their fields using a custom conversion system.
+**BepInSerializer** is a **universal plugin** made for **BepInEx 5** and designed with **cross-platform** — Windows, Mac OS, Linux — in mind. This project aims to fix the aforementioned issue by acting as an intermediate bridge in the serialization process that handles all the `UnityEngine.Object` instantiation calls, and properly serialize/deserialize their fields using a custom conversion system.
 
 This plugin does **not** add any other meaningful elements to the gameplay; there isn't much else this does aside from serialization. If you ever find anything different inside the gameplay with only this plugin alone, then you're welcome to report such bug in the [Issues Tracker](https://github.com/PixelGuy123/BepInSerializer.Mono/issues).
 
----
-
-## ❔ Why only Mono?
+## ❓ Why only Mono?
 
 If you've paid enough attention, this project only has the suffix **Mono**, which means it'll work exclusively for any Unity build made **without IL2CPP.**
 
 There are two main reasons for this to occur:
 
 1. The project was made for **BepInEx 5**, which does not work with IL2CPP. However, a version for BepInEx 6 is still planned to be developed. Although, the second reason is...
-2. Due to the fact **BepInSerializer** has been built up from the ground up to attend **Mono projects**, the architecture barely understands the complexity of **IL2CPP Interop.** And so, at this point, it would be better to not even touch this type of closed compilation _yet_.
+2. Due to the fact **BepInSerializer** has been made from the ground up to attend **Mono** projects, the architecture barely understands the complexity of **IL2CPP Interop.** And so, at this point, it would be better to not even touch this type of closed compilation _yet_.
 
 > **This project will still be maintained in the Mono environment.**
 > If you're an ambitious developer, and you're willing to [**contribute to this project**](#-contributing) with a **IL2CPP** solution, _or even a **BepInEx 6** build_, you're always welcome to do so! We'd appreciate it! 😁
@@ -42,8 +40,6 @@ If you're here because a **mod** has a dependency on this project, just follow t
 - [Converters](Documentation/Converters.md)
 - [Writing Converters](Documentation/Writing-Converters.md)
 
----
-
 ## 📦 Installation
 
 > BepInSerializer is a **plugin** made for **BepInEx 5**.
@@ -53,7 +49,7 @@ Here's the step-by-step to install this plugin into your game:
 
 1. Install [BepInEx](https://docs.bepinex.dev/articles/user_guide/installation/index.html) into the game you're wishing to play with mods.
 2. Once BepInEx is installed, download this plugin through the [Releases](https://github.com/PixelGuy123/BepInSerializer.Mono/releases/latest) page.
-3. With the binary downloaded, your last task is simply put that inside the `BepInEx/plugins` folder.
+3. With the binary downloaded, your last task is to merely put that inside the `BepInEx/plugins` folder.
 
 Note that running the game alone with this plugin won't really change much inside the game itself.
 
@@ -61,7 +57,24 @@ You can verify if the serializer **loaded in** through BepInEx Console or inside
 
 On the other hand, in order to verify that the serializer is **working** as intended, use a separate mod that supports this serializer to assure everything's functioning as expected.
 
----
+## 🍴 Cloning & Building Locally
+
+### 📝 Requirements
+
+- [NET Framework 4.6](https://dotnet.microsoft.com/en-us/download/dotnet-framework/net46)
+
+### 🖥️ Cloning from Git
+
+This basic bash script should do the job:
+
+```bash
+git clone https://github.com/PixelGuy123/BepInSerializer.Mono.git
+cd BepInSerializer.Mono
+```
+
+> **The `.csproj` contains a **`PostBuild`** event to copy the files to a few specific game locations; it is recommended to edit this event or completely remove it.**
+
+After cloning the project, a simple `dotnet build` should be enough to test if it builds locally. Finally, just copy-paste the compiled file, located in the `bin` folder, into any game with **BepInEx 5**.
 
 ## 🎮 Supported Unity Versions
 
@@ -111,29 +124,6 @@ How to submit a PR:
 5. Open a PR against `master` and reference the related issue.
 
 In the same way that issues has a template, PRs also contain a **checklist template** of their own. When writing a new Pull Request, make sure to satisfy the **conditions** of the checklist before sending your work.
-
----
-
-## 🍴 Cloning & Building Locally
-
-### 📝 Requirements
-
-- [NET Framework 4.6](https://dotnet.microsoft.com/en-us/download/dotnet-framework/net46)
-
-### 🖥️ Cloning from Git
-
-This basic bash script should do the job:
-
-```bash
-git clone https://github.com/PixelGuy123/BepInSerializer.Mono.git
-cd BepInSerializer.Mono
-```
-
-> **The `.csproj` contains a **`PostBuild`** event to copy the files to a few specific game locations; it is recommended to edit this event or completely remove it.**
-
-After cloning the project, a simple `dotnet build` should be enough to test if it builds locally. Finally, just copy-paste the compiled file, located in the `bin` folder, into any game with **BepInEx 5**.
-
----
 
 ## 📜 License
 
