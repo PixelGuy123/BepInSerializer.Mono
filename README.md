@@ -22,6 +22,7 @@ There are two main reasons for this to occur:
 2. Due to the fact **BepInSerializer** has been made from the ground up to attend **Mono** projects, the architecture barely understands the complexity of **IL2CPP Interop.** And so, at this point, it would be better to not even touch this type of closed compilation _yet_.
 
 > **This project will still be maintained in the Mono environment.**
+> 
 > If you're an ambitious developer, and you're willing to [**contribute to this project**](#-contributing) with a **IL2CPP** solution, _or even a **BepInEx 6** build_, you're always welcome to do so! We'd appreciate it! 😁
 
 ---
@@ -43,6 +44,7 @@ If you're here because a **mod** has a dependency on this project, just follow t
 ## 📦 Installation
 
 > BepInSerializer is a **plugin** made for **BepInEx 5**.
+> 
 > If you're looking for building the binary from the repository, follow the instructions in the [**Cloning & Building locally** section](#-cloning--building-locally).
 
 Here's the step-by-step to install this plugin into your game:
@@ -79,6 +81,7 @@ After cloning the project, a simple `dotnet build` should be enough to test if i
 ## 🎮 Supported Unity Versions
 
 > **You can contribute by testing the Unity builds not tested yet (⭕) in the table below!**
+> 
 > **If you find issues with these versions, the [Issues Tracker](https://github.com/PixelGuy123/BepInSerializer.Mono/issues) is always open for feedback!**
 
 Even though **BepInSerializer** is meant to be universal and Unity barely changes their serialization/instantiation rules, there's always a bit of _unpredictability_ when working with different Unity versions.
