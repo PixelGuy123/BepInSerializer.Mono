@@ -2,6 +2,14 @@
 
 [![GitHub Repository](https://img.shields.io/badge/GitHub-Repo-blue?logo=github)](https://github.com/PixelGuy123/BepInSerializer.Mono) [![Mono Support](https://img.shields.io/badge/Mono_Support-brown?logo=unity)](https://unity.com) [![BepInEx 5](https://img.shields.io/badge/BepInEx-5-gray?labelColor=663300)](https://github.com/BepInEx/BepInEx)
 
+---
+
+## ⚠️ This project is NOT affiliated with [BepInEx](https://github.com/BepInEx/BepInEx/tree/master)
+
+This project is **not maintained by the creators of BepInEx**; the logo is merely an illustration to imply the dependency of this project on BepInEx and the functionality behind this BepInSerializer.
+
+---
+
 During the development of a plugin to be used with a code-injector for Unity, there are many times the developer will need to create some sort of data structure to wrap up many basic types for its customized components.
 
 In [BepInEx](https://github.com/BepInEx), it's known that attempting to create a data structure (classes, structs) marked as _serializable_ that is _actually serialized_ is virtually impossible through Unity alone.
@@ -22,7 +30,7 @@ There are two main reasons for this to occur:
 2. Due to the fact **BepInSerializer** has been made from the ground up to attend **Mono** projects, the architecture barely understands the complexity of **IL2CPP Interop.** And so, at this point, it would be better to not even touch this type of closed compilation _yet_.
 
 > **This project will still be maintained in the Mono environment.**
-> 
+>
 > If you're an ambitious developer, and you're willing to [**contribute to this project**](#-contributing) with a **IL2CPP** solution, _or even a **BepInEx 6** build_, you're always welcome to do so! We'd appreciate it! 😁
 
 ---
@@ -36,15 +44,28 @@ If you're here because a **mod** has a dependency on this project, just follow t
 ### For Plugin Developers
 
 - [Basics](Documentation/Basics.md#basics)
+  - [Dependency Inclusion](Documentation/Basics.md#-dependency-inclusion)
+  - [Basic Usage](Documentation/Basics.md#-basic-usage)
   - [Implementing `ISerializationCallbackReceiver`](Documentation/Basics.md#-integration-with-iserializationcallbackreceiver)
 - [Attributes](Documentation/Attributes.md)
+  - [`[UseConverters()]`](Documentation/Attributes.md#using-useconverterfieldconverter)
+  - [`[AllowCollectionNesting]`](Documentation/Attributes.md#using-allowcollectionnesting)
 - [Converters](Documentation/Converters.md)
+  - [What is a Converter?](Documentation/Converters.md#-what-is-a-converter)
+  - [Built-in Converters](Documentation/Converters.md#️-built-in-converters)
+  - [How are converters chosen](Documentation/Converters.md#-how-converters-are-chosen)
 - [Writing Converters](Documentation/Writing-Converters.md)
+  - [Core Concepts](Documentation/Writing-Converters.md#-core-concepts)
+  - [Understanding `FieldContext`](Documentation/Writing-Converters.md#-understanding-fieldcontext)
+  - [What is Circular Dependency Detection?](Documentation/Writing-Converters.md#-what-is-circular-dependency-detection)
+  - [Helper Methods in `FieldConverter`](Documentation/Writing-Converters.md#-helper-methods-in-fieldconverter)
+  - [Writing a Custom Converter: `IEnumerable`](Documentation/Writing-Converters.md#️-writing-a-custom-converter-ienumerable)
+  - [Testing Your Converter](Documentation/Writing-Converters.md#-testing-your-converter)
 
 ## 📦 Installation
 
 > BepInSerializer is a **plugin** made for **BepInEx 5**.
-> 
+>
 > If you're looking for building the binary from the repository, follow the instructions in the [**Cloning & Building locally** section](#-cloning--building-locally).
 
 Here's the step-by-step to install this plugin into your game:
@@ -81,7 +102,7 @@ After cloning the project, a simple `dotnet build` should be enough to test if i
 ## 🎮 Supported Unity Versions
 
 > **You can contribute by testing the Unity builds not tested yet (⭕) in the table below!**
-> 
+>
 > **If you find issues with these versions, the [Issues Tracker](https://github.com/PixelGuy123/BepInSerializer.Mono/issues) is always open for feedback!**
 
 Even though **BepInSerializer** is meant to be universal and Unity barely changes their serialization/instantiation rules, there's always a bit of _unpredictability_ when working with different Unity versions.
@@ -106,27 +127,13 @@ Here is a table of all the Unity versions this tool has seen once in its lifetim
 - ❌ – Tested and Not planned to be supported.
 - ⭕ – Not tested yet.
 
+## 🖼️ Serialization Showcase
+
 ---
 
 ## 🤝 Contributing
 
-If you wish to contribute to this project, you are always welcomed to make a PR (Pull Request) or report a bug.
-
-### 🐞 Reporting bugs
-
-Please use the **Bug report** issue template when opening bug reports (click **New issue → Bug report**). The template collects the information we need (Unity/BepInEx/BepInSerializer versions, reproduction steps, and logs such as `BepInEx/LogOutput.log`).
-
-### ✨ Pull requests
-
-How to submit a PR:
-
-1. Fork the repository and create a branch (e.g. `feat/short-description` or `fix/short-description`).
-2. Implement your change and **test** before adding to PR.
-3. Keep a clear description of the problem and your solution.
-4. **Make sure** to **not remove the dependencies** of the original project. Unless you're adding _new_ dependencies or updating existing ones.
-5. Open a PR against `master` and reference the related issue.
-
-In the same way that issues has a template, PRs also contain a **checklist template** of their own. When writing a new Pull Request, make sure to satisfy the **conditions** of the checklist before sending your work.
+Check how to contribute to this project in the [Contributing section](CONTRIBUTING.MD).
 
 ## 📜 License
 

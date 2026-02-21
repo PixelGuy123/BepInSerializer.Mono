@@ -6,8 +6,15 @@ In general, there's not much difference when working with the serializer. For _m
 
 ## 📌 Dependency Inclusion
 
-> This is a quick section to address the way to add your plugin as a dependency to **BepInSerializer.**
-> By the way, this is totally **optional** if the intention is to allow Unity to serialize your stuff as expected.
+> GUID: `pixelguy.pixelmodding.bepinex.serializer`
+
+It's recommended to include a **soft** `[BepInDependency()]` to your plugin, especially if, in `Awake()`, any process that **requires** serialization is done.
+
+Here's a quick snippet for that:
+
+```csharp
+[BepInDependency("pixelguy.pixelmodding.bepinex.serializer")]
+```
 
 If the intention is to use all the **features** from the **BepInSerializer** (refer to the [content table in the README](../README.md#for-plugin-developers)), then you'll definitely need to add `BepInSerializer.dll` as a dependency to your plugin's project.
 
