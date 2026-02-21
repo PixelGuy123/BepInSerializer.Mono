@@ -293,7 +293,10 @@ Notes about priority:
 
 This is the one of the most important steps when making a converter: **test it.**
 
-> **_Does it work with certain values?_ Or, in the case of generics, _does it convert properly this type with this generic type?_**
+> **_Does it work with certain values?_**
+>
+> Or, in the case of generics, **_does it convert properly this type with this generic type?_**
+>
 > Questions such as these are essential for assuring your converter is ready to be used.
 
 **Always test** with scenarios that include (general checklist):
