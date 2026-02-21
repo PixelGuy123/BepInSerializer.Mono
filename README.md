@@ -1,4 +1,6 @@
-# BepInSerializer.Mono
+<div align="center">
+  <img width="445" height="173" alt="BepInSerializerLogo" src="https://github.com/user-attachments/assets/f86c72c4-bd2e-4790-a706-0ceb375db574" />
+</div>
 
 [![GitHub Repository](https://img.shields.io/badge/GitHub-Repo-blue?logo=github)](https://github.com/PixelGuy123/BepInSerializer.Mono) [![Mono Support](https://img.shields.io/badge/Mono_Support-brown?logo=unity)](https://unity.com) [![BepInEx 5](https://img.shields.io/badge/BepInEx-5-gray?labelColor=663300)](https://github.com/BepInEx/BepInEx)
 
@@ -32,6 +34,14 @@ There are two main reasons for this to occur:
 > **This project will still be maintained in the Mono environment.**
 >
 > If you're an ambitious developer, and you're willing to [**contribute to this project**](#-contributing) with a **IL2CPP** solution, _or even a **BepInEx 6** build_, you're always welcome to do so! We'd appreciate it! 😁
+
+## 🖼️ Serialization Showcase
+
+Here's a quick image showcasing this plugin in action:
+<img width="1920" height="1080" alt="Demo" src="https://github.com/user-attachments/assets/8bc8edcd-427d-40eb-b68c-36a0d4c98ab2" />
+
+> **Before BepInSerializer:** `SerializationBridgeTest` simply doesn't contain a reference to `BridgePayload` after this component is instantiated.
+> **After BepInSerializer:** the serializer takes action and serializes `BridgePayload` exactly as it was structured.
 
 ---
 
@@ -126,8 +136,6 @@ Here is a table of all the Unity versions this tool has seen once in its lifetim
 - 🚧 – Tested and Planned to be supported.
 - ❌ – Tested and Not planned to be supported.
 - ⭕ – Not tested yet.
-
-## 🖼️ Serialization Showcase
 
 ---
 
