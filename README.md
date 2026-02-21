@@ -41,6 +41,7 @@ Here's a quick image showcasing this plugin in action:
 <img width="1920" height="1080" alt="Demo" src="https://github.com/user-attachments/assets/8bc8edcd-427d-40eb-b68c-36a0d4c98ab2" />
 
 > **Before BepInSerializer:** `SerializationBridgeTest` simply doesn't contain a reference to `BridgePayload` after this component is instantiated.
+>
 > **After BepInSerializer:** the serializer takes action and serializes `BridgePayload` exactly as it was structured.
 
 ---
